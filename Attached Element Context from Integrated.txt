@@ -1,0 +1,87 @@
+Attached Element Context from Integrated Browser
+
+Element: span.meq.mqr.meq-multiline
+
+URL: http://localhost:5173/admin/exams/6a1032788d83a3b23cc0251e/edit
+
+HTML Path: div#root > div.page-wrapper > main.main-content > div.animate-fade > div > div.card > div > div.form-group > div > div > span.meq.mqr.meq-multiline
+
+Outer HTML:
+```html
+<span contenteditable="false" class="meq mqr meq-multiline" data-l="C_2H_5OH \\ CO_2" data-t="chem" style="display: inline-flex; align-items: center; width: auto; max-width: 100%; margin: 0px 4px; padding: 3px 7px; background: rgb(240, 253, 244); border: 1.5px solid rgb(187, 247, 208); border-radius: 6px; cursor: pointer; user-select: none; font-size: 1rem; line-height: 1.4; vertical-align: middle; color: rgb(0, 0, 0);"><span class="meq-line mq-math-mode"><span class="mq-selectable">$$</span><span class="mq-root-block" mathquill-block-id="31"><var mathquill-command-id="33">C</var><span class="mq-supsub mq-non-leaf" mathquill-command-id="35"><span class="mq-sub" mathquill-block-id="37"><span mathquill-command-id="36">2</span></span><span style="display:inline-block;width:0">​</span></span><var mathquill-command-id="39">H</var><span class="mq-supsub mq-non-leaf" mathquill-command-id="41"><span class="mq-sub" mathquill-block-id="43"><span mathquill-command-id="42">5</span></span><span style="display:inline-block;width:0">​</span></span><var mathquill-command-id="45">O</var><var mathquill-command-id="47">H</var></span></span><span class="meq-line mq-math-mode"><span class="mq-selectable">$$</span><span class="mq-root-block" mathquill-block-id="49"><var mathquill-command-id="51">C</var><var mathquill-command-id="53">O</var><span class="mq-supsub mq-non-leaf" mathquill-command-id="55"><span class="mq-sub" mathquill-block-id="57"><span mathquill-command-id="56">2</span></span><span style="display:inline-block;width:0">​</span></span></span></span></span>
+```
+
+Dimensions:
+- top: 239px
+- left: 509px
+- width: 94px
+- height: 78px
+
+CSS:
+```css
+element { display: inline-flex; align-items: center; width: auto; max-width: 100%; margin: 0px 4px; padding: 3px 7px; background: rgb(240, 253, 244); border: 1.5px solid rgb(187, 247, 208); border-radius: 6px; cursor: pointer; user-select: none; font-size: 1rem; line-height: 1.4; vertical-align: middle; color: rgb(0, 0, 0); }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.meq { display: inline-flex !important;
+  align-items: center;
+  width: auto !important;
+  max-width: 100%;
+  margin: 0 4px !important;
+  padding: 3px 7px !important;
+  vertical-align: middle;
+  line-height: 1.4 !important;
+  white-space: nowrap; }
+.meq { vertical-align:middle; }
+.meq.meq-multiline { align-items: flex-start !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  margin: 6px 4px !important;
+  white-space: normal;
+  vertical-align: top; }
+
+/* Pseudo-elements */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+
+/* Inherited */
+body { font-family: var(--font-body); color: var(--text-primary); line-height: 1.6 }
+html { font-size: 16px }
+
+/* Resolved values */
+margin: 6px 4px;
+padding: 3px 7px;
+border-radius: 6px;
+border: 0.8px solid rgb(187, 247, 208);
+white-space: normal;
+align-items: flex-start;
+background-attachment: scroll;
+background-clip: border-box;
+background-color: rgb(240, 253, 244);
+background-image: none;
+background-origin: padding-box;
+background-position-x: 0%;
+background-position-y: 0%;
+background-repeat: repeat;
+background-size: auto;
+box-sizing: border-box;
+color: rgb(0, 0, 0);
+column-gap: 6px;
+cursor: pointer;
+display: inline-flex;
+flex-direction: column;
+font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+font-size: 16px;
+height: 66.475px;
+line-height: 22.4px;
+max-width: 100%;
+row-gap: 6px;
+user-select: none;
+vertical-align: middle;
+width: 86.2px;
+
+/* CSS variables */
+--border-light: #353548;
+--bg-primary: #0a0a0f;
+--text-primary: #f0eeff;
+--font-body: "DM Sans", sans-serif;
+```

@@ -1,0 +1,15 @@
+{
+  "name": "quiz-app-mern",
+  "version": "1.0.0",
+  "description": "Full-Stack MERN Quiz Application",
+  "scripts": {
+    "dev":         "concurrently \"npm run server\" \"npm run client\"",
+    "server":      "cd server && npm run dev",
+    "client":      "cd client && npm run dev",
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install",
+    "build":       "cd client && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
