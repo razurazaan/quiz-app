@@ -690,6 +690,29 @@
   width: 82px;
 }
 
+.math-ribbon-direction {
+  height: 24px;
+  width: 82px;
+  border: 1px solid #aebcc4;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #ffffff, #dfe7eb);
+  color: #475569;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.math-ribbon-direction.active {
+  border-color: #2563eb;
+  background: linear-gradient(180deg, #dbeafe, #93c5fd);
+  color: #1d4ed8;
+}
+
+.math-ribbon-direction:hover {
+  border-color: #2563eb;
+}
+
 .math-ribbon-backspace {
   height: 25px;
   min-width: 34px;

@@ -863,8 +863,10 @@ function MatrixEditor({ latex, onChange, inCanvas = false, fontSize = 20 }) {
 // Multiline equation area (shared by both modals)
 // ════════════════════════════════════════════════════════════════════════════
 function EquationArea({ accent="blue", lines, setLines, activeLine, setActiveLine,
-  lineRefs, mqRefs, MQ, fontSize=14, minHeight=190, matrixLatex="", setMatrixLatex }) {
+  lineRefs, mqRefs, MQ, fontSize=14, minHeight=190, matrixLatex="", setMatrixLatex,
+  textDirection="ltr" }) {
   const editingMatrix = Boolean(matrixLatex && setMatrixLatex);
+  const isRtl = textDirection === "rtl";
 
   const handleKey = (e,i) => {
     if (e.key==="Enter") {
@@ -880,11 +882,17 @@ function EquationArea({ accent="blue", lines, setLines, activeLine, setActiveLin
   };
 
   return (
-    <div style={{display:"flex",background:"#ffffff",flex:1,overflow:"hidden",minHeight}}>
+    <div
+      dir={textDirection}
+      style={{display:"flex",background:"#ffffff",flex:1,overflow:"hidden",minHeight,direction:textDirection}}
+    >
       {/* Equation lines */}
-      <div style={{flex:1,overflowY:"auto",paddingTop:6,paddingBottom:16,cursor:"text"}}>
+      <div style={{
+        flex:1,overflowY:"auto",paddingTop:6,paddingBottom:16,cursor:"text",
+        direction:textDirection,textAlign:isRtl ? "right" : "left",
+      }}>
         {editingMatrix ? (
-          <div style={{padding:"14px 18px",minHeight:minHeight - 22}}>
+          <div style={{padding:"14px 18px",minHeight:minHeight - 22,display:"flex",justifyContent:isRtl ? "flex-end" : "flex-start"}}>
             <MatrixEditor latex={matrixLatex} onChange={setMatrixLatex} inCanvas fontSize={fontSize} />
           </div>
         ) : !MQ && (
@@ -895,17 +903,20 @@ function EquationArea({ accent="blue", lines, setLines, activeLine, setActiveLin
         {!editingMatrix && MQ && lines.map((_,i)=>(
           <div key={i} onClick={()=>setActiveLine(i)}
             style={{display:"flex",alignItems:"center",minHeight:46,
-              paddingLeft:12,paddingRight:10,cursor:"text",position:"relative",
+              paddingLeft:isRtl ? 10 : 12,paddingRight:isRtl ? 12 : 10,cursor:"text",position:"relative",
               background:"transparent",
-              transition:"all 0.12s",boxSizing:"border-box"}}>
+              transition:"all 0.12s",boxSizing:"border-box",direction:textDirection}}>
             <span ref={el=>lineRefs.current[i]=el}
               onKeyDown={e=>handleKey(e,i)}
-              style={{display:"block",flex:1,fontSize:fontSize+"px",lineHeight:1,minHeight:36}}/>
+              style={{
+                display:"block",flex:1,fontSize:fontSize+"px",lineHeight:1,minHeight:36,
+                direction:textDirection,textAlign:isRtl ? "right" : "left",
+              }}/>
           </div>
         ))}
         {/* Empty space to click and add lines */}
         {!editingMatrix && MQ && (
-          <div style={{padding:"6px 14px"}}>
+          <div style={{padding:"6px 14px",textAlign:isRtl ? "right" : "left"}}>
             <button type="button"
               onClick={()=>{
                 setLines(p=>[...p,""]);
@@ -933,6 +944,7 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
   const [grp,setGrp]   = useState(0);
   const [font,setFont] = useState("serif");
   const [size,setSize] = useState(16);
+  const [editorDirection,setEditorDirection] = useState("ltr");
   const [matrixLatex,setMatrixLatex] = useState(initialMatrix);
   const [lines,setLines]           = useState(() => {
     if (initialMatrix) return [""];
@@ -1002,6 +1014,10 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
     setActiveLine(0);
   };
   const clr = () => { setMatrixLatex(""); setLines([""]); mqRefs.current=[]; lineRefs.current=[]; setActiveLine(0); };
+  const toggleEditorDirection = () => {
+    setEditorDirection(d => d === "rtl" ? "ltr" : "rtl");
+    setTimeout(()=>mqRefs.current[activeLine]?.focus(),30);
+  };
   const full = matrixLatex || lines.join(" \\\\ ");
   const has  = matrixLatex.trim()!=="" || lines.some(l=>l.trim()!=="");
   const isMatrixGroup = MATH_GROUPS[grp].label === "Matrices & Vectors";
@@ -1076,6 +1092,14 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
             <select value={size} onChange={e=>setSize(+e.target.value)} className="math-ribbon-select small">
               {[12,13,14,15,16,18,20,24].map(s=><option key={s}>{s}</option>)}
             </select>
+            <button
+              type="button"
+              title={editorDirection==="rtl" ? "Switch to left-to-right editing" : "Switch to right-to-left editing"}
+              className={`math-ribbon-direction ${editorDirection==="rtl" ? "active" : ""}`}
+              onClick={toggleEditorDirection}
+            >
+              {editorDirection==="rtl" ? "س" : "س"}
+            </button>
           </div>
 
           <button
@@ -1093,7 +1117,8 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
       <EquationArea accent="blue" lines={lines} setLines={setLines}
         activeLine={activeLine} setActiveLine={setActiveLine}
         lineRefs={lineRefs} mqRefs={mqRefs} MQ={MQ} fontSize={size} minHeight={160}
-        matrixLatex={matrixLatex} setMatrixLatex={setMatrixLatex} />
+        matrixLatex={matrixLatex} setMatrixLatex={setMatrixLatex}
+        textDirection={editorDirection} />
 
       {/* Bottom status + actions */}
       <div style={{padding:"8px 14px",display:"flex",alignItems:"center",gap:10,
@@ -1344,7 +1369,7 @@ export default function RichTextEditor({
   const [focused,  setFocused]  = useState(false);
   const [wordCount,setWordCount]= useState(0);
   const [textDirection,setTextDirection] = useState(() =>
-    /dir=["']rtl["']|direction\s*:\s*rtl/i.test(value) ? "rtl" : "ltr"
+    /dir=["']rtl["']|direction\s*:\s*rtl/i.test(value) ? "س" : "س"
   );
 
   useEffect(()=>{
