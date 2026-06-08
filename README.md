@@ -186,3 +186,4 @@ npm run dev
 | HTTP      | Axios               |
 | Toasts    | react-hot-toast     |
 | Fonts     | Syne + DM Sans      |
+"# quiz-app" 
