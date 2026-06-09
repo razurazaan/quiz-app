@@ -5,9 +5,11 @@ import { Toaster } from "react-hot-toast";
 import App from "./App.jsx";
 import "./index.css";
 
+const routerBaseName = import.meta.env.BASE_URL.replace(/\/$/, "") || undefined;
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <BrowserRouter basename="/quiz-app">
+    <BrowserRouter basename={routerBaseName}>
       <App />
       <Toaster
         position="top-right"
