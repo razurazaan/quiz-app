@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "../../api/axios";
 import toast from "react-hot-toast";
-import MathEditor from "../../components/common/MathEditor";
+import MathEditor from "../../components/common/MathEditor.jsx";
 
 const MCQ_LABELS = ["A", "B", "C", "D"];
 const createMcqOptions = () => MCQ_LABELS.map(label => ({ label, text: "" }));
