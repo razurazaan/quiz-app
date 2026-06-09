@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import api from "../../api/axios";
 import { formatDate, formatSeconds, gradeColor } from "../../utils/helpers";
-import MathEditor from "../../components/common/MathEditor";
+import MathEditor from "../../components/common/MathEditor.jsx";
 
 export default function ResultDetail() {
   const { id } = useParams();
