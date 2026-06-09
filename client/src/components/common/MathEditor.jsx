@@ -941,11 +941,31 @@ function MatrixPicker({ onPick }) {
 }
 
 function SpecialCharacterPicker({ onPick }) {
+  const pickerRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState("symbol");
   const [selected, setSelected] = useState("$");
   const [code, setCode] = useState(characterCode("$"));
   const activeCharacters = SPECIAL_CHARACTER_GROUPS[category].chars;
+
+  useEffect(() => {
+    if (!open) return;
+
+    const closeWhenOutside = (event) => {
+      if (!pickerRef.current?.contains(event.target)) setOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+
+    document.addEventListener("pointerdown", closeWhenOutside, true);
+    document.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.removeEventListener("pointerdown", closeWhenOutside, true);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
 
   const choose = (char) => {
     setSelected(char);
@@ -967,7 +987,7 @@ function SpecialCharacterPicker({ onPick }) {
   };
 
   return (
-    <div className="special-symbol-picker">
+    <div className="special-symbol-picker" ref={pickerRef}>
       <button
         type="button"
         title="Special character"
