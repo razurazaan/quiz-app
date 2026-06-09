@@ -242,11 +242,36 @@ const CHEM_GROUPS = [
   ]},
 ];
 
-const QUICK_MATH = [
-  {d:"a/b",l:"\\frac{a}{b}"},{d:"√x",l:"\\sqrt{x}"},{d:"x²",l:"x^{2}"},
-  {d:"±",l:"\\pm"},{d:"≤",l:"\\leq"},{d:"≥",l:"\\geq"},
-  {d:"≠",l:"\\neq"},{d:"≈",l:"\\approx"},{d:"∞",l:"\\infty"},
-  {d:"π",l:"\\pi"},{d:"∑",l:"\\sum"},{d:"∫",l:"\\int"},
+const ROOT_FRACTION_MAIN = [
+  { icon:"fraction", l:"\\frac{a}{b}", t:"Fraction" },
+  { icon:"sqrt", l:"\\sqrt{x}", t:"Square root" },
+  { icon:"sup", l:"x^{2}", t:"Superscript" },
+  { icon:"paren", l:"\\left(x\\right)", t:"Parentheses" },
+  { icon:"bracket", l:"\\left[x\\right]", t:"Brackets" },
+  { icon:"slashFraction", l:"\\frac{a}{b}", t:"Fraction slash" },
+  { icon:"nthRoot", l:"\\sqrt[n]{x}", t:"Nth root" },
+  { icon:"sub", l:"x_{n}", t:"Subscript" },
+  { icon:"absolute", l:"\\left|x\\right|", t:"Absolute value" },
+  { icon:"brace", l:"\\left\\{x\\right\\}", t:"Braces" },
+  { icon:"smallFraction", l:"\\frac{1}{x}", t:"Reciprocal" },
+  { icon:"rootFraction", l:"\\frac{\\sqrt{a}}{b}", t:"Root over denominator" },
+  { icon:"subsup", l:"x_{n}^{m}", t:"Subscript and superscript" },
+];
+
+const ROOT_FRACTION_EXTRA = [
+  { icon:"cubeRoot", l:"\\sqrt[3]{x}", t:"Cube root" },
+  { icon:"nestedFraction", l:"\\frac{\\frac{a}{b}}{c}", t:"Nested fraction" },
+  { icon:"sumDenominator", l:"\\frac{a}{b+c}", t:"Fraction with sum denominator" },
+  { icon:"sumNumerator", l:"\\frac{a+b}{c}", t:"Sum over c" },
+  { icon:"negativePower", l:"x^{-1}", t:"Negative power" },
+  { icon:"floor", l:"\\lfloor x\\rfloor", t:"Floor" },
+  { icon:"ceiling", l:"\\lceil x\\rceil", t:"Ceiling" },
+];
+
+const ROOT_QUICK_SYMBOLS = [
+  {d:"+",l:"+"},{d:"/",l:"/"},{d:"≥",l:"\\geq"},{d:"≤",l:"\\leq"},{d:"∅",l:"\\emptyset"},
+  {d:"×",l:"\\times"},{d:"±",l:"\\pm"},{d:"∈",l:"\\in"},{d:"⊂",l:"\\subset"},{d:"∞",l:"\\infty"},
+  {d:"-",l:"-"},{d:"÷",l:"\\div"},{d:"∪",l:"\\cup"},{d:"∩",l:"\\cap"},{d:"π",l:"\\pi"},
 ];
 
 const charRange = (start, end) =>
@@ -535,6 +560,243 @@ function RibbonSymbolButton({ item, onInsert, onMatrix }) {
     >
       {item.d}
     </button>
+  );
+}
+
+function TemplateBox({ small = false }) {
+  return <span className={`root-template-box ${small ? "small" : ""}`} />;
+}
+
+function RootFractionIcon({ type }) {
+  switch (type) {
+    case "fraction":
+      return (
+        <span className="root-template-icon root-template-fraction">
+          <TemplateBox />
+          <span className="root-template-line" />
+          <TemplateBox />
+        </span>
+      );
+    case "slashFraction":
+      return (
+        <span className="root-template-icon root-template-slash-fraction">
+          <TemplateBox small />
+          <span className="root-template-slash">/</span>
+          <TemplateBox small />
+        </span>
+      );
+    case "smallFraction":
+      return (
+        <span className="root-template-icon root-template-small-fraction">
+          <TemplateBox small />
+          <span className="root-template-line short" />
+          <TemplateBox small />
+        </span>
+      );
+    case "nestedFraction":
+      return (
+        <span className="root-template-icon root-template-nested-fraction">
+          <span className="root-template-mini-stack">
+            <TemplateBox small />
+            <span className="root-template-line short" />
+            <TemplateBox small />
+          </span>
+          <span className="root-template-line" />
+          <TemplateBox small />
+        </span>
+      );
+    case "sumDenominator":
+      return (
+        <span className="root-template-icon root-template-fraction">
+          <TemplateBox small />
+          <span className="root-template-line" />
+          <span className="root-template-row">
+            <TemplateBox small />
+            <span>+</span>
+            <TemplateBox small />
+          </span>
+        </span>
+      );
+    case "sumNumerator":
+      return (
+        <span className="root-template-icon root-template-fraction">
+          <span className="root-template-row">
+            <TemplateBox small />
+            <span>+</span>
+            <TemplateBox small />
+          </span>
+          <span className="root-template-line" />
+          <TemplateBox small />
+        </span>
+      );
+    case "sqrt":
+      return (
+        <span className="root-template-icon root-template-root">
+          <span className="root-template-radical">√</span>
+          <TemplateBox />
+        </span>
+      );
+    case "nthRoot":
+      return (
+        <span className="root-template-icon root-template-root nth">
+          <TemplateBox small />
+          <span className="root-template-radical">√</span>
+          <TemplateBox />
+        </span>
+      );
+    case "cubeRoot":
+      return (
+        <span className="root-template-icon root-template-root nth">
+          <span className="root-template-index">3</span>
+          <span className="root-template-radical">√</span>
+          <TemplateBox />
+        </span>
+      );
+    case "rootFraction":
+      return (
+        <span className="root-template-icon root-template-root-fraction">
+          <span className="root-template-root">
+            <span className="root-template-radical">√</span>
+            <TemplateBox small />
+          </span>
+          <span className="root-template-line" />
+          <TemplateBox small />
+        </span>
+      );
+    case "sup":
+      return (
+        <span className="root-template-icon root-template-script">
+          <TemplateBox />
+          <TemplateBox small />
+        </span>
+      );
+    case "sub":
+      return (
+        <span className="root-template-icon root-template-script sub">
+          <TemplateBox />
+          <TemplateBox small />
+        </span>
+      );
+    case "subsup":
+      return (
+        <span className="root-template-icon root-template-sub-sup">
+          <TemplateBox />
+          <span className="root-template-script-stack">
+            <TemplateBox small />
+            <TemplateBox small />
+          </span>
+        </span>
+      );
+    case "negativePower":
+      return (
+        <span className="root-template-icon root-template-negative-power">
+          <TemplateBox />
+          <span>-1</span>
+        </span>
+      );
+    case "paren":
+      return (
+        <span className="root-template-icon root-template-fence">
+          <span>(</span>
+          <TemplateBox />
+          <span>)</span>
+        </span>
+      );
+    case "bracket":
+      return (
+        <span className="root-template-icon root-template-fence">
+          <span>[</span>
+          <TemplateBox />
+          <span>]</span>
+        </span>
+      );
+    case "absolute":
+      return (
+        <span className="root-template-icon root-template-fence">
+          <span>|</span>
+          <TemplateBox />
+          <span>|</span>
+        </span>
+      );
+    case "brace":
+      return (
+        <span className="root-template-icon root-template-fence">
+          <span>{"{"}</span>
+          <TemplateBox />
+          <span>{"}"}</span>
+        </span>
+      );
+    case "floor":
+      return (
+        <span className="root-template-icon root-template-fence">
+          <span>⌊</span>
+          <TemplateBox />
+          <span>⌋</span>
+        </span>
+      );
+    case "ceiling":
+      return (
+        <span className="root-template-icon root-template-fence">
+          <span>⌈</span>
+          <TemplateBox />
+          <span>⌉</span>
+        </span>
+      );
+    default:
+      return null;
+  }
+}
+
+function RootFractionTemplateButton({ item, onPick }) {
+  return (
+    <button
+      type="button"
+      title={item.t}
+      className="root-template-button"
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => onPick(item.l)}
+    >
+      <RootFractionIcon type={item.icon} />
+    </button>
+  );
+}
+
+function RootFractionPalette({ onInsert }) {
+  const [open, setOpen] = useState(false);
+  const pick = (latex) => {
+    onInsert(latex);
+    setOpen(false);
+  };
+
+  return (
+    <div className="root-template-strip">
+      {ROOT_FRACTION_MAIN.map((item) => (
+        <RootFractionTemplateButton key={item.t} item={item} onPick={onInsert} />
+      ))}
+
+      <div className="root-template-more">
+        <button
+          type="button"
+          title="More roots and fractions"
+          className={`root-template-button root-template-more-trigger ${open ? "active" : ""}`}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => setOpen(value => !value)}
+        >
+          <span className="root-template-more-symbol">
+            <RootFractionIcon type="fraction" />
+            <span>▾</span>
+          </span>
+        </button>
+
+        {open && (
+          <div className="root-template-popup">
+            {ROOT_FRACTION_EXTRA.map((item) => (
+              <RootFractionTemplateButton key={item.t} item={item} onPick={pick} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1020,6 +1282,7 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
   };
   const full = matrixLatex || lines.join(" \\\\ ");
   const has  = matrixLatex.trim()!=="" || lines.some(l=>l.trim()!=="");
+  const isRootsGroup = MATH_GROUPS[grp].label === "Roots & Fractions";
   const isMatrixGroup = MATH_GROUPS[grp].label === "Matrices & Vectors";
 
   return (
@@ -1050,57 +1313,67 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
         </div>
 
         <div className="math-ribbon-body">
-          <div className="math-ribbon-palette">
-            {isMatrixGroup && <MatrixPicker onPick={chooseMatrix} />}
-            {MATH_GROUPS[grp].items.map((it) => (
-              <RibbonSymbolButton key={`${it.t}-${it.l}`} item={it} onInsert={ins} onMatrix={chooseMatrix} />
-            ))}
+          <div className={`math-ribbon-palette ${isRootsGroup ? "roots-fraction-palette" : ""}`}>
+            {isRootsGroup ? (
+              <RootFractionPalette onInsert={ins} />
+            ) : (
+              <>
+                {isMatrixGroup && <MatrixPicker onPick={chooseMatrix} />}
+                {MATH_GROUPS[grp].items.map((it) => (
+                  <RibbonSymbolButton key={`${it.t}-${it.l}`} item={it} onInsert={ins} onMatrix={chooseMatrix} />
+                ))}
+              </>
+            )}
           </div>
 
-          <div className="math-ribbon-sep" />
+          {isRootsGroup && (
+            <>
+              <div className="math-ribbon-sep" />
 
-          <div className="math-ribbon-quick">
-            {QUICK_MATH.map((b,i)=>(
-              <button
-                key={`${b.d}-${i}`}
-                type="button"
-                title={b.d}
-                className="math-ribbon-mini"
-                onClick={()=>ins(b.l)}
-              >
-                {b.d}
-              </button>
-            ))}
-            <button type="button" title="Bold math" className="math-ribbon-mini rich" onClick={()=>ins("\\mathbf{}")}>
-              <b>B</b>
-            </button>
-            <button type="button" title="Italic math" className="math-ribbon-mini rich" onClick={()=>ins("\\mathit{}")}>
-              <i>1b</i>
-            </button>
-            <button type="button" title="Blackboard" className="math-ribbon-mini rich" onClick={()=>ins("\\mathbb{}")}>
-              T
-            </button>
-            <SpecialCharacterPicker onPick={insertSpecialChar} />
-          </div>
+              <div className="math-ribbon-quick roots-fraction-quick">
+                {ROOT_QUICK_SYMBOLS.map((b,i)=>(
+                  <button
+                    key={`${b.d}-${i}`}
+                    type="button"
+                    title={b.d}
+                    className="math-ribbon-mini"
+                    onClick={()=>ins(b.l)}
+                  >
+                    {b.d}
+                  </button>
+                ))}
+                <button type="button" title="Bold math" className="math-ribbon-mini rich" onClick={()=>ins("\\mathbf{}")}>
+                  <b>B</b>
+                </button>
+                <button type="button" title="Italic math" className="math-ribbon-mini rich" onClick={()=>ins("\\mathit{}")}>
+                  <i>1b</i>
+                </button>
+                <button type="button" title="Blackboard" className="math-ribbon-mini rich" onClick={()=>ins("\\mathbb{}")}>
+                  T
+                </button>
+                <SpecialCharacterPicker onPick={insertSpecialChar} />
+              </div>
 
-          <div className="math-ribbon-sep" />
+              <div className="math-ribbon-sep" />
 
-          <div className="math-ribbon-format">
-            <select value={font} onChange={e=>setFont(e.target.value)} className="math-ribbon-select">
-              {["serif","Arial","Courier New","Times New Roman"].map(f=><option key={f}>{f}</option>)}
-            </select>
-            <select value={size} onChange={e=>setSize(+e.target.value)} className="math-ribbon-select small">
-              {[12,13,14,15,16,18,20,24].map(s=><option key={s}>{s}</option>)}
-            </select>
-            <button
-              type="button"
-              title={editorDirection==="rtl" ? "Switch to left-to-right editing" : "Switch to right-to-left editing"}
-              className={`math-ribbon-direction ${editorDirection==="rtl" ? "active" : ""}`}
-              onClick={toggleEditorDirection}
-            >
-              {editorDirection==="rtl" ? "س" : "س"}
-            </button>
-          </div>
+              <div className="math-ribbon-format">
+                <select value={font} onChange={e=>setFont(e.target.value)} className="math-ribbon-select">
+                  {["serif","Arial","Courier New","Times New Roman"].map(f=><option key={f}>{f}</option>)}
+                </select>
+                <select value={size} onChange={e=>setSize(+e.target.value)} className="math-ribbon-select small">
+                  {[12,13,14,15,16,18,20,24].map(s=><option key={s}>{s}</option>)}
+                </select>
+                <button
+                  type="button"
+                  title={editorDirection==="rtl" ? "Switch to left-to-right editing" : "Switch to right-to-left editing"}
+                  className={`math-ribbon-direction ${editorDirection==="rtl" ? "active" : ""}`}
+                  onClick={toggleEditorDirection}
+                >
+                  {editorDirection==="rtl" ? "س" : "س"}
+                </button>
+              </div>
+            </>
+          )}
 
           <button
             type="button"

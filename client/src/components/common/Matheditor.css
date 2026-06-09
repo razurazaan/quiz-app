@@ -627,6 +627,205 @@
   max-width: 145px;
 }
 
+.math-ribbon-palette.roots-fraction-palette {
+  max-width: 168px;
+  z-index: 30;
+}
+
+.root-template-strip {
+  display: grid;
+  grid-template-columns: repeat(5, 29px);
+  gap: 3px 4px;
+  align-items: center;
+  position: relative;
+}
+
+.root-template-button {
+  width: 29px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: #17833a;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Times New Roman", Symbola, serif;
+  line-height: 1;
+}
+
+.root-template-button:hover,
+.root-template-button.active {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: #8fb2c2;
+}
+
+.root-template-icon {
+  width: 25px;
+  height: 19px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #17833a;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.root-template-box {
+  width: 7px;
+  height: 7px;
+  display: inline-block;
+  box-sizing: border-box;
+  border: 2px solid currentColor;
+  background: #fbfffb;
+  flex: 0 0 auto;
+}
+
+.root-template-box.small {
+  width: 5px;
+  height: 5px;
+  border-width: 1.5px;
+}
+
+.root-template-line {
+  width: 18px;
+  height: 1.5px;
+  background: currentColor;
+  display: block;
+  flex: 0 0 auto;
+}
+
+.root-template-line.short {
+  width: 13px;
+}
+
+.root-template-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  font-size: 0.55rem;
+}
+
+.root-template-fraction,
+.root-template-small-fraction,
+.root-template-nested-fraction,
+.root-template-root-fraction {
+  flex-direction: column;
+  gap: 1px;
+}
+
+.root-template-mini-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.root-template-root {
+  display: inline-flex;
+  gap: 1px;
+  align-items: center;
+}
+
+.root-template-root.nth {
+  align-items: flex-start;
+  gap: 0;
+}
+
+.root-template-radical {
+  font-size: 1.04rem;
+  line-height: 0.9;
+  transform: translateY(-1px);
+}
+
+.root-template-index {
+  font-size: 0.55rem;
+  line-height: 1;
+  transform: translate(2px, 1px);
+}
+
+.root-template-script {
+  align-items: flex-start;
+  gap: 1px;
+  padding-top: 2px;
+}
+
+.root-template-script.sub {
+  align-items: flex-end;
+  padding-top: 0;
+  padding-bottom: 2px;
+}
+
+.root-template-sub-sup {
+  gap: 2px;
+}
+
+.root-template-script-stack {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.root-template-negative-power {
+  align-items: flex-start;
+  gap: 1px;
+  font-size: 0.55rem;
+}
+
+.root-template-fence {
+  gap: 2px;
+  font-size: 1rem;
+}
+
+.root-template-slash-fraction {
+  gap: 1px;
+}
+
+.root-template-slash {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.root-template-more {
+  position: relative;
+  display: inline-flex;
+}
+
+.root-template-more-symbol {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  transform: scale(0.9);
+}
+
+.root-template-popup {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: -2px;
+  z-index: 120;
+  display: grid;
+  grid-template-columns: repeat(2, 29px);
+  gap: 3px;
+  padding: 4px;
+  border: 1px solid #96adba;
+  border-radius: 7px;
+  background: linear-gradient(180deg, #eff8fb, #d7e6ee);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.22);
+}
+
+.roots-fraction-quick {
+  max-width: 131px;
+}
+
+.roots-fraction-quick .math-ribbon-mini {
+  min-width: 23px;
+  height: 22px;
+  padding: 0 3px;
+  font-size: 0.95rem;
+}
+
 .math-ribbon-symbol,
 .math-ribbon-mini {
   min-width: 28px;
