@@ -131,7 +131,7 @@ npm run dev
 ```
 
 - **Backend:** http://localhost:5000
-- **Frontend:[http://localhost:5173](https://quiz-app-amber-iota-30.vercel.app/login)
+- Frontend:[http://localhost:5173](https://quiz-app-amber-iota-30.vercel.app/login)
 
 ---
 
