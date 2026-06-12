@@ -12,6 +12,7 @@ app.set("trust proxy", 1);
 const defaultOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
+  "https://quiz-app-amber-iota-30.vercel.app/",
 ];
 const configuredOrigins = (process.env.CLIENT_URL || "")
   .split(",")

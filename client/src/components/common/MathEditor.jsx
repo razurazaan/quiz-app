@@ -22,16 +22,70 @@ const loadMQ = async () => {
   await loadAsset("js","https://cdnjs.cloudflare.com/ajax/libs/mathquill/0.10.1/mathquill.min.js");
   return window.MathQuill.getInterface(2);
 };
-const mqInsert = (mq, latex) => {
-  if (!mq) return;
-  // Try to write the latex directly
-  mq.write(latex);
-  mq.focus();
+const readMqLatex = (mq) => {
+  try {
+    return typeof mq?.latex === "function" ? mq.latex() : "";
+  } catch {
+    return "";
+  }
 };
+const escapeTextLatex = text => String(text).replace(/[\\{}]/g, "\\$&");
 const mqInsertPlainText = (mq, text) => {
   if (!mq) return;
-  if (typeof mq.typedText === "function") mq.typedText(text);
-  else mq.write(text);
+  const textValue = String(text);
+  const textLatex = `\\text{${escapeTextLatex(textValue)}}`;
+  const preferTextMode = /[^\x20-\x7E]/u.test(textValue);
+  const before = readMqLatex(mq);
+
+  if (preferTextMode) {
+    try {
+      mq.write(textLatex);
+    } catch {
+      // Fall through to typed text insertion below.
+    }
+
+    if (readMqLatex(mq) !== before) {
+      mq.focus();
+      return;
+    }
+  }
+
+  try {
+    if (typeof mq.typedText === "function") mq.typedText(textValue);
+    else mq.write(textValue);
+  } catch {
+    // Fall through to safer text-mode insertion below.
+  }
+
+  if (readMqLatex(mq) === before) {
+    try {
+      mq.write(textLatex);
+    } catch {
+      try {
+        mq.write(textValue);
+      } catch {
+        // Keep focus behavior even when MathQuill rejects a rare glyph.
+      }
+    }
+  }
+
+  mq.focus();
+};
+const mqInsert = (mq, latex, fallbackText = "") => {
+  if (!mq) return;
+  const before = readMqLatex(mq);
+  let wrote = true;
+  try {
+    mq.write(latex);
+  } catch {
+    wrote = false;
+  }
+
+  if ((!wrote || readMqLatex(mq) === before) && fallbackText) {
+    mqInsertPlainText(mq, fallbackText);
+    return;
+  }
+
   mq.focus();
 };
 const splitEquationLines = (latex = "") =>
@@ -58,7 +112,7 @@ const buildMatrixLatex = (rows = 3, cols = 3, env = "bmatrix", fill = "") => {
 };
 
 const parseMatrixLatex = (latex = "") => {
-  const match = String(latex).trim().match(/^\\begin\{(bmatrix|pmatrix|vmatrix|matrix)\}([\s\S]*)\\end\{\1\}$/);
+  const match = String(latex).trim().match(/^\\begin\{(bmatrix|pmatrix|vmatrix|matrix|cases|boxmatrix|dboxmatrix)\}([\s\S]*)\\end\{\1\}$/);
   if (!match) return null;
 
   const rows = match[2].split(/\\\\/).map(row => row.split("&").map(cell => cell.trim()));
@@ -113,7 +167,7 @@ const renderStaticEquation = (MQ, el, latex) => {
   el.innerHTML = "";
   el.classList.toggle("meq-multiline", lines.length > 1);
   el.classList.toggle("meq-matrix-wrap", Boolean(matrix));
-  ["bmatrix", "pmatrix", "vmatrix", "matrix"].forEach(env =>
+  ["bmatrix", "pmatrix", "vmatrix", "matrix", "cases", "boxmatrix", "dboxmatrix"].forEach(env =>
     el.classList.toggle(`meq-matrix-${env}`, matrix?.env === env)
   );
 
@@ -138,7 +192,604 @@ const renderStaticEquation = (MQ, el, latex) => {
 };
 
 // ── Symbol data ───────────────────────────────────────────────────────────────
-const MATH_GROUPS = [
+const ARROW_SYMBOL_GROUPS = [
+  [
+    [
+      { d:"←", l:"\\leftarrow", t:"Left arrow" },
+      { d:"→", l:"\\rightarrow", t:"Right arrow" },
+      { d:"↔", l:"\\leftrightarrow", t:"Left right arrow" },
+    ],
+    [
+      { d:"⇐", l:"\\Leftarrow", t:"Left double arrow" },
+      { d:"⇒", l:"\\Rightarrow", t:"Right double arrow" },
+      { d:"⇔", l:"\\Leftrightarrow", t:"Left right double arrow" },
+    ],
+    [
+      { d:"↢", l:"↢", t:"Left arrow with tail", plain:true },
+      { d:"↣", l:"↣", t:"Right arrow with tail", plain:true },
+      { d:"↦", l:"\\mapsto", t:"Maps to" },
+    ],
+  ],
+  [
+    [
+      { d:"⋮", l:"\\vdots", t:"Vertical dots" },
+      { d:"⋱", l:"\\ddots", t:"Down diagonal dots" },
+    ],
+    [
+      { d:"⋯", l:"\\cdots", t:"Centered dots" },
+      { d:"⋰", l:"⋰", t:"Up diagonal dots", plain:true },
+    ],
+    [
+      { d:"…", l:"\\ldots", t:"Ellipsis" },
+      { d:"⋰", l:"⋰", t:"Up diagonal dots", plain:true },
+    ],
+  ],
+  [
+    [
+      { d:"−", l:"-", t:"Minus" },
+    ],
+    [
+      { d:"—", l:"—", t:"Long dash", plain:true },
+    ],
+    [
+      { d:"―", l:"―", t:"Horizontal bar", plain:true },
+    ],
+  ],
+  [
+    [
+      { d:"□→", l:"\\rightarrow", t:"Right arrow with label", template:true },
+      { d:"→□", l:"\\rightarrow", t:"Right arrow label template", template:true },
+      { d:"□→□", l:"\\rightarrow", t:"Right arrow with above and below labels", template:true },
+    ],
+    [
+      { d:"□←", l:"\\leftarrow", t:"Left arrow with label", template:true },
+      { d:"←□", l:"\\leftarrow", t:"Left arrow label template", template:true },
+      { d:"□←□", l:"\\leftarrow", t:"Left arrow with above and below labels", template:true },
+    ],
+    [
+      { d:"⇄", l:"\\rightleftarrows", t:"Right left arrows" },
+      { d:"⇆", l:"\\leftrightarrows", t:"Left right arrows" },
+      { d:"↩", l:"↩", t:"Left hook arrow", plain:true },
+    ],
+  ],
+  [
+    [
+      { d:"↼", l:"\\leftharpoonup", t:"Left harpoon up" },
+      { d:"⇀", l:"\\rightharpoonup", t:"Right harpoon up" },
+      { d:"↽", l:"\\leftharpoondown", t:"Left harpoon down" },
+      { d:"⇁", l:"\\rightharpoondown", t:"Right harpoon down" },
+    ],
+    [
+      { d:"↿", l:"↿", t:"Up harpoon left", plain:true },
+      { d:"↾", l:"↾", t:"Up harpoon right", plain:true },
+      { d:"⇃", l:"⇃", t:"Down harpoon left", plain:true },
+      { d:"⇂", l:"⇂", t:"Down harpoon right", plain:true },
+    ],
+    [
+      { d:"↞", l:"↞", t:"Two headed left arrow", plain:true },
+      { d:"↠", l:"↠", t:"Two headed right arrow", plain:true },
+      { d:"↜", l:"↜", t:"Left wave arrow", plain:true },
+      { d:"↝", l:"↝", t:"Right wave arrow", plain:true },
+    ],
+  ],
+  [
+    [
+      { d:"□↑", l:"\\uparrow", t:"Up arrow with label", template:true },
+      { d:"↑□", l:"\\uparrow", t:"Up arrow below label", template:true },
+    ],
+    [
+      { d:"□↓", l:"\\downarrow", t:"Down arrow with label", template:true },
+      { d:"↓□", l:"\\downarrow", t:"Down arrow below label", template:true },
+    ],
+    [
+      { d:"↑", l:"\\uparrow", t:"Up arrow" },
+      { d:"↓", l:"\\downarrow", t:"Down arrow" },
+      { d:"↕", l:"\\updownarrow", t:"Up down arrow" },
+    ],
+  ],
+];
+
+const CALCULUS_SYMBOL_GROUPS = [
+  [
+    [
+      { icon:"intLimits", l:"\\int_{a}^{b}", t:"Integral with upper and lower limits" },
+      { icon:"intDifferential", l:"\\int f dx", t:"Integral with differential", fallback:"∫ f dx" },
+    ],
+    [
+      { icon:"intLower", l:"\\int_{a}", t:"Integral with lower limit" },
+      { icon:"intLimitsDifferential", l:"\\int_{a}^{b} f dx", t:"Integral with limits and differential", fallback:"∫ₐᵇ f dx" },
+    ],
+    [
+      { icon:"int", l:"\\int", t:"Integral" },
+      { icon:"intDoubleDifferential", l:"\\int f dx dy", t:"Integral with two differentials", fallback:"∫ f dx dy" },
+    ],
+  ],
+  [
+    [
+      { d:"d", l:"d", t:"Differential d" },
+      { icon:"dOverDx", l:"\\frac{d}{dx}", t:"Derivative operator" },
+    ],
+    [
+      { d:"∂", l:"\\partial", t:"Partial differential" },
+      { icon:"partialOverDx", l:"\\frac{\\partial}{\\partial x}", t:"Partial derivative operator" },
+    ],
+    [
+      { icon:"secondDerivative", l:"\\frac{d^{2}}{dx^{2}}", t:"Second derivative operator" },
+    ],
+  ],
+  [
+    [
+      { icon:"limToInfinity", l:"\\lim_{x\\to\\infty}", t:"Limit to infinity" },
+      { icon:"nablaCross", l:"\\nabla\\times F", t:"Curl" },
+      { icon:"nablaBox", l:"\\nabla f", t:"Gradient" },
+    ],
+    [
+      { icon:"limBox", l:"\\lim_{x\\to a}", t:"Limit with condition" },
+      { icon:"nablaDot", l:"\\nabla\\cdot F", t:"Divergence" },
+      { icon:"deltaBox", l:"\\Delta x", t:"Delta operator" },
+    ],
+    [
+      { d:"lim", l:"\\lim", t:"Limit" },
+    ],
+  ],
+  [
+    [
+      { d:"∫", l:"\\int", t:"Integral" },
+      { d:"∬", l:"\\iint", t:"Double integral" },
+    ],
+    [
+      { d:"∮", l:"\\oint", t:"Contour integral" },
+      { d:"∭", l:"\\iiint", t:"Triple integral" },
+    ],
+    [
+      { d:"∯", l:"∯", t:"Surface integral", plain:true },
+      { d:"∰", l:"∰", t:"Volume integral", plain:true },
+    ],
+  ],
+  [
+    [
+      { d:"sin", l:"\\sin", t:"Sine" },
+      { d:"cos", l:"\\cos", t:"Cosine" },
+      { d:"tan", l:"\\tan", t:"Tangent" },
+    ],
+    [
+      { d:"log", l:"\\log", t:"Logarithm" },
+      { icon:"logBase", l:"\\log_{b}", t:"Logarithm with base" },
+      { d:"ln", l:"\\ln", t:"Natural logarithm" },
+    ],
+    [
+      { d:"sec", l:"\\sec", t:"Secant" },
+      { d:"csc", l:"\\csc", t:"Cosecant" },
+      { d:"cot", l:"\\cot", t:"Cotangent" },
+    ],
+  ],
+];
+
+const LARGE_OPERATOR_SYMBOL_GROUPS = [
+  [
+    [
+      { op:"Σ", mode:"limits", l:"\\sum_{i=1}^{n}", t:"Summation with upper and lower limits" },
+      { op:"Σ", mode:"upper", l:"\\sum^{n}", t:"Summation with upper limit" },
+    ],
+    [
+      { op:"Σ", mode:"plain", l:"\\sum", t:"Summation" },
+      { op:"Σ", mode:"lower", l:"\\sum_{i=1}", t:"Summation with lower limit" },
+    ],
+    [
+      { op:"Σ", mode:"sideLimits", l:"\\sum_{i=1}^{n}", t:"Inline summation with limits" },
+    ],
+  ],
+  [
+    [
+      { op:"Π", mode:"limits", l:"\\prod_{i=1}^{n}", t:"Product with upper and lower limits" },
+      { op:"Π", mode:"upper", l:"\\prod^{n}", t:"Product with upper limit" },
+    ],
+    [
+      { op:"Π", mode:"plain", l:"\\prod", t:"Product" },
+      { op:"Π", mode:"lower", l:"\\prod_{i=1}", t:"Product with lower limit" },
+    ],
+    [
+      { op:"Π", mode:"sideLimits", l:"\\prod_{i=1}^{n}", t:"Inline product with limits" },
+    ],
+  ],
+  [
+    [
+      { op:"∐", mode:"limits", l:"\\coprod_{i=1}^{n}", t:"Coproduct with upper and lower limits" },
+      { op:"∐", mode:"sideLimits", l:"\\coprod_{i=1}^{n}", t:"Inline coproduct with limits" },
+    ],
+    [
+      { op:"∐", mode:"plain", l:"\\coprod", t:"Coproduct" },
+      { op:"⨿", mode:"lower", l:"\\bigsqcup_{i=1}", t:"Disjoint union with lower limit" },
+    ],
+    [
+      { op:"⊔", mode:"plain", l:"\\sqcup", t:"Square union" },
+    ],
+  ],
+  [
+    [
+      { op:"∩", mode:"large", l:"\\bigcap", t:"Big intersection" },
+    ],
+    [
+      { op:"∪", mode:"large", l:"\\bigcup", t:"Big union" },
+    ],
+    [
+      { op:"⋂", mode:"lower", l:"\\bigcap_{i=1}", t:"Intersection with lower limit" },
+      { op:"⋃", mode:"lower", l:"\\bigcup_{i=1}", t:"Union with lower limit" },
+    ],
+  ],
+];
+
+const BRACKET_SYMBOL_GROUPS = [
+  [
+    [
+      { icon:"paren", l:"\\left(x\\right)", t:"Parentheses" },
+      { icon:"abs", l:"\\left|x\\right|", t:"Absolute value bars" },
+      { icon:"angle", l:"⟨x⟩", t:"Angle brackets", plain:true },
+    ],
+    [
+      { icon:"bracket", l:"\\left[x\\right]", t:"Square brackets" },
+      { icon:"norm", l:"‖x‖", t:"Double bars / norm", plain:true },
+      { icon:"brace", l:"\\left\\{x\\right\\}", t:"Braces" },
+    ],
+    [
+      { icon:"floor", l:"\\lfloor x\\rfloor", t:"Floor brackets" },
+      { icon:"ceil", l:"\\lceil x\\rceil", t:"Ceiling brackets" },
+      { icon:"corner", l:"⌜□⌝", t:"Corner brackets", plain:true },
+    ],
+  ],
+  [
+    [
+      { icon:"overline", l:"\\overline{x}", t:"Overline" },
+      { icon:"overbrace", l:"⏞x", t:"Overbrace", plain:true },
+    ],
+    [
+      { icon:"underline", l:"\\underline{x}", t:"Underline" },
+      { icon:"underbrace", l:"x⏟", t:"Underbrace", plain:true },
+    ],
+    [
+      { icon:"boxed", l:buildMatrixLatex(1, 1, "boxmatrix"), t:"Boxed expression" },
+      { icon:"sqrtBox", l:"\\sqrt{x}", t:"Square root placeholder" },
+    ],
+  ],
+  [
+    [
+      { icon:"dot", l:"ẋ", t:"Dot accent", plain:true },
+      { icon:"ddot", l:"ẍ", t:"Double dot accent", plain:true },
+      { icon:"hat", l:"x̂", t:"Hat accent", plain:true },
+      { icon:"tilde", l:"x̃", t:"Tilde accent", plain:true },
+    ],
+    [
+      { icon:"bar", l:"\\bar{x}", t:"Bar accent" },
+      { icon:"vec", l:"\\vec{x}", t:"Vector accent" },
+      { icon:"breve", l:"x̆", t:"Breve accent", plain:true },
+      { icon:"check", l:"x̌", t:"Check accent", plain:true },
+    ],
+    [
+      { icon:"prime", l:"x'", t:"Prime" },
+      { icon:"doublePrime", l:"x''", t:"Double prime" },
+      { icon:"widehat", l:"x̂", t:"Wide hat", plain:true },
+      { icon:"widetilde", l:"x̃", t:"Wide tilde", plain:true },
+    ],
+  ],
+  [
+    [
+      { icon:"leftBar", l:"|", t:"Left vertical bar", plain:true },
+      { icon:"rightBar", l:"|", t:"Right vertical bar", plain:true },
+      { icon:"rect", l:buildMatrixLatex(1, 1, "boxmatrix"), t:"Rectangle box" },
+    ],
+    [
+      { icon:"leftBracket", l:"[", t:"Left square bracket", plain:true },
+      { icon:"rightBracket", l:"]", t:"Right square bracket", plain:true },
+      { icon:"circleBox", l:"⊙", t:"Circled operator", plain:true },
+    ],
+    [
+      { icon:"leftBrace", l:"{", t:"Left brace", plain:true },
+      { icon:"rightBrace", l:"}", t:"Right brace", plain:true },
+      { icon:"squareBox", l:"□", t:"Square symbol", plain:true },
+    ],
+  ],
+  [
+    [
+      { d:"∅", l:"∅", t:"Empty set", plain:true },
+      { d:"⊞", l:"⊞", t:"Box plus", plain:true },
+    ],
+    [
+      { d:"∄", l:"∄", t:"Does not exist", plain:true },
+      { d:"⋈", l:"⋈", t:"Bowtie", plain:true },
+    ],
+    [
+      { d:"⊘", l:"⊘", t:"Circled slash", plain:true },
+      { d:"⊠", l:"⊠", t:"Box times", plain:true },
+    ],
+  ],
+];
+
+const SCRIPT_LAYOUT_SYMBOL_GROUPS = [
+  [
+    [
+      { icon:"fraction", l:"\\frac{a}{b}", t:"Fraction" },
+      { icon:"smallFraction", l:"\\frac{a}{b}", t:"Small fraction" },
+    ],
+    [
+      { icon:"slashFraction", l:"\\frac{a}{b}", t:"Slash fraction" },
+      { icon:"bevelFraction", l:"a/b", t:"Beveled fraction" },
+    ],
+    [
+      { icon:"stackedFraction", l:"\\frac{\\frac{a}{b}}{c}", t:"Stacked fraction" },
+    ],
+  ],
+  [
+    [
+      { icon:"sqrt", l:"\\sqrt{x}", t:"Square root" },
+      { icon:"power", l:"x^{n}", t:"Superscript" },
+    ],
+    [
+      { icon:"nthRoot", l:"\\sqrt[n]{x}", t:"Nth root" },
+      { icon:"subscript", l:"x_{n}", t:"Subscript" },
+    ],
+    [
+      { icon:"rootFraction", l:"\\frac{\\sqrt{x}}{b}", t:"Root over denominator" },
+      { icon:"subsup", l:"x_{n}^{m}", t:"Subscript and superscript" },
+    ],
+  ],
+  [
+    [
+      { icon:"leftSup", l:"{}^{n}x", t:"Left superscript" },
+      { icon:"leftSub", l:"{}_{n}x", t:"Left subscript" },
+      { icon:"leftSubsup", l:"{}_{n}^{m}x", t:"Left subscript and superscript" },
+    ],
+    [
+      { icon:"rightSup", l:"x^{n}", t:"Right superscript" },
+      { icon:"rightSub", l:"x_{n}", t:"Right subscript" },
+      { icon:"rightSubsup", l:"x_{n}^{m}", t:"Right subscript and superscript" },
+    ],
+    [
+      { icon:"prescript", l:"{}_{n}^{m}x", t:"Pre-script" },
+    ],
+  ],
+  [
+    [
+      { icon:"verticalDots", l:"\\vdots", t:"Vertical dots" },
+      { icon:"matrixColumn", l:"\\frac{x}{y}", t:"Two-row column" },
+    ],
+    [
+      { icon:"threeStack", l:"\\frac{\\frac{x}{y}}{z}", t:"Three-row stack" },
+      { icon:"caseStack", l:buildMatrixLatex(2, 1, "cases"), t:"Cases stack" },
+    ],
+    [
+      { icon:"dottedStack", l:"x,\\ldots,z", t:"Dotted stack" },
+    ],
+  ],
+  [
+    [
+      { icon:"overBox", l:"x^{n}", t:"Box above" },
+      { icon:"underBox", l:"x_{n}", t:"Box below" },
+    ],
+    [
+      { icon:"boxedTall", l:buildMatrixLatex(1, 1, "boxmatrix"), t:"Tall box" },
+      { icon:"sideBox", l:"xy", t:"Side-by-side boxes" },
+    ],
+    [
+      { icon:"doubleBox", l:buildMatrixLatex(1, 1, "dboxmatrix"), t:"Nested box" },
+    ],
+  ],
+  [
+    [
+      { icon:"smallRow", l:buildMatrixLatex(1, 2, "matrix"), t:"Two small boxes" },
+      { icon:"smallPair", l:"x\\,y", t:"Spaced pair" },
+      { icon:"smallTriple", l:"x\\,y\\,z", t:"Three small boxes" },
+    ],
+    [
+      { icon:"threeColumns", l:buildMatrixLatex(1, 3, "matrix"), t:"Three columns" },
+    ],
+    [
+      { icon:"grid", l:buildMatrixLatex(2, 2, "matrix"), t:"Two by two grid" },
+    ],
+  ],
+];
+
+const ARROW_POPUP_SYMBOL_GROUPS = [
+  [
+    { d:"↗", l:"↗", t:"North east arrow", plain:true },
+    { d:"↘", l:"↘", t:"South east arrow", plain:true },
+    { d:"↖", l:"↖", t:"North west arrow", plain:true },
+    { d:"↙", l:"↙", t:"South west arrow", plain:true },
+  ],
+  [
+    { d:"·", l:"\\cdot", t:"Dot operator" },
+    { d:"⋆", l:"\\star", t:"Star operator" },
+    { d:"∘", l:"\\circ", t:"Circle operator" },
+    { d:"•", l:"•", t:"Bullet operator", plain:true },
+  ],
+  [
+    { d:"±", l:"\\pm", t:"Plus minus" },
+    { d:"∓", l:"\\mp", t:"Minus plus" },
+    { d:"×", l:"\\times", t:"Times" },
+    { d:"÷", l:"\\div", t:"Division" },
+  ],
+  [
+    { d:"⇋", l:"⇋", t:"Left right harpoons", plain:true },
+    { d:"⇌", l:"\\rightleftharpoons", t:"Right left harpoons" },
+    { d:"⟶", l:"⟶", t:"Long right arrow", plain:true },
+    { d:"⟵", l:"⟵", t:"Long left arrow", plain:true },
+  ],
+  [
+    { d:"⇇", l:"⇇", t:"Paired left arrows", plain:true },
+    { d:"⇉", l:"⇉", t:"Paired right arrows", plain:true },
+    { d:"⇍", l:"⇍", t:"Not left double arrow", plain:true },
+    { d:"⇏", l:"⇏", t:"Not right double arrow", plain:true },
+  ],
+  [
+    { d:"⇑", l:"\\Uparrow", t:"Up double arrow" },
+    { d:"⇓", l:"\\Downarrow", t:"Down double arrow" },
+    { d:"⇕", l:"\\Updownarrow", t:"Up down double arrow" },
+    { d:"↯", l:"↯", t:"Down zigzag arrow", plain:true },
+  ],
+];
+
+const CALCULUS_POPUP_SYMBOL_GROUPS = [
+  [
+    { d:"∫₀∞", l:"\\int_{0}^{\\infty}", t:"Integral from zero to infinity", fallback:"∫₀∞" },
+    { d:"∫∫", l:"\\iint", t:"Double integral" },
+    { d:"∫∫∫", l:"\\iiint", t:"Triple integral" },
+  ],
+  [
+    { d:"d³/dx³", l:"\\frac{d^{3}}{dx^{3}}", t:"Third derivative", fallback:"d³/dx³" },
+    { d:"∂³/∂x³", l:"\\frac{\\partial^{3}}{\\partial x^{3}}", t:"Third partial derivative", fallback:"∂³/∂x³" },
+    { d:"d/dt", l:"\\frac{d}{dt}", t:"Derivative with respect to t" },
+  ],
+  [
+    { d:"∇²", l:"\\nabla^{2}", t:"Laplacian", fallback:"∇²" },
+    { d:"grad", l:"\\nabla f", t:"Gradient" },
+    { d:"div", l:"\\nabla\\cdot F", t:"Divergence" },
+    { d:"curl", l:"\\nabla\\times F", t:"Curl" },
+  ],
+  [
+    { d:"∮C", l:"\\oint_{C}", t:"Contour integral over C", fallback:"∮C" },
+    { d:"∯S", l:"∯_{S}", t:"Surface integral over S", plain:true },
+    { d:"∰V", l:"∰_{V}", t:"Volume integral over V", plain:true },
+  ],
+  [
+    { d:"arcsin", l:"\\sin^{-1}", t:"Arc sine" },
+    { d:"arccos", l:"\\cos^{-1}", t:"Arc cosine" },
+    { d:"arctan", l:"\\tan^{-1}", t:"Arc tangent" },
+    { d:"log₁₀", l:"\\log_{10}", t:"Base ten logarithm", fallback:"log₁₀" },
+  ],
+];
+
+const SCRIPT_LAYOUT_POPUP_SYMBOL_GROUPS = [
+  [
+    { icon:"nestedFraction", l:"\\frac{a}{\\frac{b}{c}}", t:"Nested denominator fraction" },
+    { icon:"sumNumerator", l:"\\frac{a+b}{c}", t:"Sum over denominator" },
+    { icon:"sumDenominator", l:"\\frac{a}{b+c}", t:"Numerator over sum" },
+  ],
+  [
+    { icon:"cubeRoot", l:"\\sqrt[3]{x}", t:"Cube root", fallback:"∛x" },
+    { icon:"fourthRoot", l:"\\sqrt[4]{x}", t:"Fourth root", fallback:"⁴√x" },
+    { icon:"negativePower", l:"x^{-1}", t:"Negative power" },
+  ],
+  [
+    { icon:"prescript", l:"{}_{i}^{j}A", t:"Pre-script matrix index" },
+    { icon:"leftSubsup", l:"{}_{a}^{b}x", t:"Left subscript and superscript" },
+    { icon:"rightSubsup", l:"x_{a}^{b}", t:"Right subscript and superscript" },
+  ],
+  [
+    { icon:"verticalDots", l:"\\vdots", t:"Vertical dots" },
+    { icon:"dottedStack", l:"a,\\ldots,n", t:"Dotted sequence" },
+    { icon:"caseStack", l:buildMatrixLatex(3, 1, "cases"), t:"Three-line cases" },
+  ],
+  [
+    { icon:"boxedTall", l:buildMatrixLatex(1, 1, "boxmatrix"), t:"Boxed placeholder" },
+    { icon:"doubleBox", l:buildMatrixLatex(1, 1, "dboxmatrix"), t:"Double boxed placeholder" },
+    { icon:"sideBox", l:"a\\,b", t:"Side by side placeholders" },
+  ],
+  [
+    { icon:"grid", l:buildMatrixLatex(2, 2, "matrix"), t:"Two by two grid" },
+    { icon:"threeColumns", l:buildMatrixLatex(1, 3, "matrix"), t:"Three-column layout" },
+    { icon:"smallTriple", l:"a\\,b\\,c", t:"Three small boxes" },
+  ],
+];
+
+const BRACKET_POPUP_SYMBOL_GROUPS = [
+  [
+    { icon:"angle", l:"\\left\\langle x\\right\\rangle", t:"Angle bracket pair", fallback:"⟨x⟩" },
+    { icon:"norm", l:"\\left\\|x\\right\\|", t:"Norm pair", fallback:"‖x‖" },
+    { icon:"corner", l:"⌜x⌝", t:"Corner bracket pair", plain:true },
+  ],
+  [
+    { icon:"overline", l:"\\overline{AB}", t:"Line segment" },
+    { icon:"underline", l:"\\underline{AB}", t:"Underlined segment" },
+    { icon:"sqrtBox", l:"\\sqrt{x+y}", t:"Root with expression" },
+  ],
+  [
+    { icon:"widehat", l:"\\hat{x}", t:"Hat accent" },
+    { icon:"widetilde", l:"\\tilde{x}", t:"Tilde accent" },
+    { icon:"vec", l:"\\vec{x}", t:"Vector accent" },
+  ],
+  [
+    { icon:"leftBar", l:"\\left|", t:"Left absolute value bar", fallback:"|" },
+    { icon:"rightBar", l:"\\right|", t:"Right absolute value bar", fallback:"|" },
+    { icon:"rect", l:buildMatrixLatex(1, 1, "boxmatrix"), t:"Rectangle placeholder" },
+  ],
+  [
+    { d:"⊡", l:"⊡", t:"Squared dot", plain:true },
+    { d:"⊛", l:"⊛", t:"Circled asterisk", plain:true },
+    { d:"⊚", l:"⊚", t:"Circled ring", plain:true },
+    { d:"⊟", l:"⊟", t:"Box minus", plain:true },
+  ],
+];
+
+const LARGE_OPERATOR_POPUP_SYMBOL_GROUPS = [
+  [
+    { op:"⨊", mode:"plain", l:"⨊", t:"Modulo two sum", plain:true },
+    { op:"∑", mode:"sideLimits", l:"\\sum_{k=0}^{\\infty}", t:"Infinite series", fallback:"∑∞" },
+    { op:"⨋", mode:"plain", l:"⨋", t:"Summation with integral", plain:true },
+  ],
+  [
+    { op:"⋀", mode:"large", l:"\\bigwedge", t:"Big logical and" },
+    { op:"⋁", mode:"large", l:"\\bigvee", t:"Big logical or" },
+    { op:"⨀", mode:"large", l:"\\bigodot", t:"Big odot" },
+  ],
+  [
+    { op:"⨁", mode:"large", l:"\\bigoplus", t:"Big direct sum" },
+    { op:"⨂", mode:"large", l:"\\bigotimes", t:"Big tensor product" },
+    { op:"⨄", mode:"large", l:"\\biguplus", t:"Big union plus" },
+  ],
+  [
+    { op:"⋃", mode:"sideLimits", l:"\\bigcup_{i=1}^{n}", t:"Union with limits" },
+    { op:"⋂", mode:"sideLimits", l:"\\bigcap_{i=1}^{n}", t:"Intersection with limits" },
+    { op:"⨆", mode:"large", l:"\\bigsqcup", t:"Big square union" },
+  ],
+];
+
+const GENERIC_POPUP_SYMBOLS = {
+  "Greek Letters": [
+    { d:"ϑ", l:"\\vartheta", t:"Variant theta", fallback:"ϑ" },
+    { d:"ϕ", l:"\\varphi", t:"Variant phi", fallback:"ϕ" },
+    { d:"ϖ", l:"\\varpi", t:"Variant pi", fallback:"ϖ" },
+    { d:"ϱ", l:"\\varrho", t:"Variant rho", fallback:"ϱ" },
+    { d:"ς", l:"\\varsigma", t:"Final sigma", fallback:"ς" },
+    { d:"ℏ", l:"\\hbar", t:"Reduced Planck constant", fallback:"ℏ" },
+    { d:"ℓ", l:"\\ell", t:"Script ell", fallback:"ℓ" },
+    { d:"ℵ", l:"\\aleph", t:"Aleph", fallback:"ℵ" },
+    { d:"℧", l:"℧", t:"Mho", plain:true },
+  ],
+  "Sets & Logic": [
+    { d:"⊻", l:"⊻", t:"Exclusive or", plain:true },
+    { d:"⊼", l:"⊼", t:"NAND", plain:true },
+    { d:"⊽", l:"⊽", t:"NOR", plain:true },
+    { d:"⋂", l:"\\bigcap", t:"Big intersection" },
+    { d:"⋃", l:"\\bigcup", t:"Big union" },
+    { d:"⊗", l:"\\otimes", t:"Tensor product" },
+    { d:"⊙", l:"\\odot", t:"Circle dot" },
+    { d:"⊝", l:"⊝", t:"Circled dash", plain:true },
+    { d:"↯", l:"↯", t:"Contradiction arrow", plain:true },
+  ],
+  "Trigonometry": [
+    { d:"asin", l:"\\sin^{-1}x", t:"Inverse sine" },
+    { d:"acos", l:"\\cos^{-1}x", t:"Inverse cosine" },
+    { d:"atan", l:"\\tan^{-1}x", t:"Inverse tangent" },
+    { d:"sech", l:"\\operatorname{sech}x", t:"Hyperbolic secant", fallback:"sech" },
+    { d:"csch", l:"\\operatorname{csch}x", t:"Hyperbolic cosecant", fallback:"csch" },
+    { d:"coth", l:"\\coth x", t:"Hyperbolic cotangent" },
+    { d:"sin 2x", l:"\\sin 2x", t:"Sine double angle" },
+    { d:"cos 2x", l:"\\cos 2x", t:"Cosine double angle" },
+    { d:"tan 2x", l:"\\tan 2x", t:"Tangent double angle" },
+  ],
+  "Matrices & Vectors": [
+    { d:"4×4", l:buildMatrixLatex(4, 4, "bmatrix"), t:"4 by 4 matrix" },
+    { d:"diag", l:"\\begin{bmatrix}a&0\\\\0&b\\end{bmatrix}", t:"Diagonal matrix" },
+    { d:"det", l:"\\det A", t:"Determinant" },
+    { d:"rank", l:"\\operatorname{rank}A", t:"Rank", fallback:"rank A" },
+    { d:"A⁻¹", l:"A^{-1}", t:"Inverse matrix" },
+    { d:"A*", l:"A^{*}", t:"Conjugate transpose" },
+    { d:"span", l:"\\operatorname{span}\\{v_{1},v_{2}\\}", t:"Span", fallback:"span" },
+    { d:"proj", l:"\\operatorname{proj}_{u}v", t:"Projection", fallback:"proj" },
+    { d:"⟂", l:"\\perp", t:"Perpendicular" },
+  ],
+};
+
+const MATH_GROUP_ITEMS = [
   { icon:"√", label:"Roots & Fractions", items:[
     {d:"a/b",l:"\\frac{a}{b}",t:"Fraction"},{d:"√x",l:"\\sqrt{x}",t:"Square root"},
     {d:"x²",l:"x^{2}",t:"Square"},{d:"xⁿ",l:"x^{n}",t:"Power n"},
@@ -152,26 +803,34 @@ const MATH_GROUPS = [
   ]},
   { icon:"αΩ", label:"Greek Letters", items:[
     {d:"α",l:"\\alpha",t:"alpha"},{d:"β",l:"\\beta",t:"beta"},{d:"γ",l:"\\gamma",t:"gamma"},
-    {d:"Δ",l:"\\Delta",t:"Delta"},{d:"θ",l:"\\theta",t:"theta"},{d:"λ",l:"\\lambda",t:"lambda"},
-    {d:"μ",l:"\\mu",t:"mu"},{d:"π",l:"\\pi",t:"pi"},{d:"Σ",l:"\\Sigma",t:"Sigma"},
-    {d:"φ",l:"\\phi",t:"phi"},{d:"ω",l:"\\omega",t:"omega"},{d:"Ω",l:"\\Omega",t:"Omega"},
-    {d:"δ",l:"\\delta",t:"delta"},{d:"ε",l:"\\epsilon",t:"epsilon"},{d:"η",l:"\\eta",t:"eta"},
-    {d:"κ",l:"\\kappa",t:"kappa"},{d:"ν",l:"\\nu",t:"nu"},{d:"ρ",l:"\\rho",t:"rho"},
-    {d:"τ",l:"\\tau",t:"tau"},{d:"ψ",l:"\\psi",t:"psi"},{d:"Γ",l:"\\Gamma",t:"Gamma"},
-    {d:"Λ",l:"\\Lambda",t:"Lambda"},{d:"Φ",l:"\\Phi",t:"Phi"},{d:"Ψ",l:"\\Psi",t:"Psi"},
+    {d:"δ",l:"\\delta",t:"delta"},{d:"ε",l:"\\epsilon",t:"epsilon"},{d:"ζ",l:"\\zeta",t:"zeta"},
+    {d:"η",l:"\\eta",t:"eta"},{d:"θ",l:"\\theta",t:"theta"},{d:"ι",l:"\\iota",t:"iota"},
+    {d:"κ",l:"\\kappa",t:"kappa"},{d:"λ",l:"\\lambda",t:"lambda"},{d:"μ",l:"\\mu",t:"mu"},
+    {d:"ν",l:"\\nu",t:"nu"},{d:"ξ",l:"\\xi",t:"xi"},{d:"ο",l:"o",t:"omicron"},
+    {d:"π",l:"\\pi",t:"pi"},{d:"ρ",l:"\\rho",t:"rho"},{d:"σ",l:"\\sigma",t:"sigma"},
+    {d:"τ",l:"\\tau",t:"tau"},{d:"υ",l:"\\upsilon",t:"upsilon"},{d:"φ",l:"\\phi",t:"phi"},
+    {d:"χ",l:"\\chi",t:"chi"},{d:"ψ",l:"\\psi",t:"psi"},{d:"ω",l:"\\omega",t:"omega"},
+    {d:"Γ",l:"\\Gamma",t:"Gamma"},{d:"Δ",l:"\\Delta",t:"Delta"},{d:"Θ",l:"\\Theta",t:"Theta"},
+    {d:"Λ",l:"\\Lambda",t:"Lambda"},{d:"Ξ",l:"\\Xi",t:"Xi"},{d:"Π",l:"\\Pi",t:"Pi"},
+    {d:"Σ",l:"\\Sigma",t:"Sigma"},{d:"Υ",l:"\\Upsilon",t:"Upsilon"},{d:"Φ",l:"\\Phi",t:"Phi"},
+    {d:"Ψ",l:"\\Psi",t:"Psi"},{d:"Ω",l:"\\Omega",t:"Omega"},
   ]},
+  { icon:"→", label:"Arrow Symbols", items:[] },
+  { icon:"□²", label:"Scripts & Layouts", items:[] },
+  { icon:"(□)", label:"Brackets & Accents", items:[] },
+  { icon:"Σ∪", label:"Large Operators", items:[] },
   { icon:"∫", label:"Calculus", items:[
     {d:"∫",l:"\\int_{a}^{b}",t:"Definite integral"},{d:"∂f/∂x",l:"\\frac{\\partial f}{\\partial x}",t:"Partial derivative"},
     {d:"dy/dx",l:"\\frac{dy}{dx}",t:"Derivative"},{d:"lim",l:"\\lim_{x\\to 0}",t:"Limit"},
     {d:"∑",l:"\\sum_{i=0}^{n}",t:"Sum"},{d:"∇",l:"\\nabla",t:"Nabla"},
     {d:"∞",l:"\\infty",t:"Infinity"},{d:"∬",l:"\\iint",t:"Double integral"},
     {d:"∮",l:"\\oint",t:"Contour integral"},{d:"d²y/dx²",l:"\\frac{d^{2}y}{dx^{2}}",t:"2nd derivative"},
-    {d:"∫f dx",l:"\\int f\\,dx",t:"Indefinite integral"},{d:"∭",l:"\\iiint",t:"Triple integral"},
+    {d:"∫f dx",l:"\\int f dx",t:"Indefinite integral"},{d:"∭",l:"\\iiint",t:"Triple integral"},
     {d:"∂²f/∂x²",l:"\\frac{\\partial^{2} f}{\\partial x^{2}}",t:"Second partial derivative"},
     {d:"f′",l:"f'",t:"First derivative prime"},{d:"f″",l:"f''",t:"Second derivative prime"},
     {d:"lim∞",l:"\\lim_{x\\to\\infty}",t:"Limit to infinity"},{d:"∏",l:"\\prod_{i=1}^{n}",t:"Product"},
     {d:"∇·F",l:"\\nabla\\cdot F",t:"Divergence"},{d:"∇×F",l:"\\nabla\\times F",t:"Curl"},
-    {d:"dx",l:"\\,dx",t:"Differential dx"},
+    {d:"dx",l:"dx",t:"Differential dx"},
   ]},
   { icon:"∈", label:"Sets & Logic", items:[
     {d:"∈",l:"\\in",t:"Element of"},{d:"∉",l:"\\notin",t:"Not element"},
@@ -184,6 +843,16 @@ const MATH_GROUPS = [
     {d:"∨",l:"\\vee",t:"Or"},{d:"⇒",l:"\\Rightarrow",t:"Implies"},
     {d:"⇔",l:"\\Leftrightarrow",t:"If and only if"},{d:"⊕",l:"\\oplus",t:"Exclusive or"},
     {d:"∴",l:"\\therefore",t:"Therefore"},{d:"∵",l:"\\because",t:"Because"},
+    {d:"∋",l:"\\ni",t:"Contains as member"},{d:"∌",l:"∌",t:"Does not contain",fallback:"∌"},
+    {d:"⊄",l:"\\nsubset",t:"Not subset",fallback:"⊄"},{d:"⊈",l:"\\nsubseteq",t:"Not subset or equal",fallback:"⊈"},
+    {d:"⊅",l:"\\nsupset",t:"Not superset",fallback:"⊅"},{d:"⊉",l:"\\nsupseteq",t:"Not superset or equal",fallback:"⊉"},
+    {d:"⊊",l:"\\subsetneq",t:"Proper subset",fallback:"⊊"},{d:"⊋",l:"\\supsetneq",t:"Proper superset",fallback:"⊋"},
+    {d:"ℕ",l:"\\mathbb{N}",t:"Natural numbers",fallback:"ℕ"},{d:"ℤ",l:"\\mathbb{Z}",t:"Integers",fallback:"ℤ"},
+    {d:"ℚ",l:"\\mathbb{Q}",t:"Rational numbers",fallback:"ℚ"},{d:"ℝ",l:"\\mathbb{R}",t:"Real numbers",fallback:"ℝ"},
+    {d:"ℂ",l:"\\mathbb{C}",t:"Complex numbers",fallback:"ℂ"},{d:"⊤",l:"\\top",t:"True",fallback:"⊤"},
+    {d:"⊥",l:"\\bot",t:"False / contradiction",fallback:"⊥"},{d:"⊢",l:"\\vdash",t:"Proves",fallback:"⊢"},
+    {d:"⊨",l:"\\models",t:"Models / entails",fallback:"⊨"},{d:"⊬",l:"⊬",t:"Does not prove",fallback:"⊬"},
+    {d:"⊭",l:"⊭",t:"Does not entail",fallback:"⊭"},{d:"↦",l:"\\mapsto",t:"Maps to",fallback:"↦"},
   ]},
   { icon:"sin", label:"Trigonometry", items:[
     {d:"sin",l:"\\sin x",t:"sin"},{d:"cos",l:"\\cos x",t:"cos"},
@@ -207,6 +876,23 @@ const MATH_GROUPS = [
     {d:"Aᵀ",l:"A^{T}",t:"Transpose"},
   ]},
 ];
+
+const MATH_GROUP_ORDER = [
+  "Roots & Fractions",
+  "Sets & Logic",
+  "Arrow Symbols",
+  "Greek Letters",
+  "Matrices & Vectors",
+  "Scripts & Layouts",
+  "Brackets & Accents",
+  "Large Operators",
+  "Calculus",
+  "Trigonometry",
+];
+
+const MATH_GROUPS = MATH_GROUP_ORDER
+  .map(label => MATH_GROUP_ITEMS.find(group => group.label === label))
+  .filter(Boolean);
 
 const CHEM_GROUPS = [
   { icon:"H₂O", label:"Common Compounds", items:[
@@ -299,6 +985,12 @@ const SPECIAL_CHARACTER_CHARS = Array.from(new Set([
   ...charRange(0x2B12, 0x2B4C),
 ]));
 
+const GREEK_CHARACTER_CHARS = Array.from(new Set([
+  ...charRange(0x0391, 0x03A9),
+  ...charRange(0x03B1, 0x03C9),
+  "ϐ", "ϑ", "ϒ", "ϕ", "ϖ", "ϱ", "ϰ", "ϵ", "϶",
+]));
+
 const PUNCTUATION_CHARACTER_CHARS = Array.from(new Set(Array.from(String.raw`!"#%&'()*,-./:;?@[\]_{}¡§«¶·»¿;·՚՛՜՝՞՟։֊־׀׃׆׳״؉؊،؍؛؞؟٪٫٬٭۔๏๚๛‐‑‒–—―‖‗‘’‚‛“”„‟†‡•‥…‰‱′″‴‵‶‷‸‹›※‼‽‾⁀⁃⁇⁎⁏⁐⁑⁗⁞⌈⌉⌊⌋〈〉❲❳⟅⟆⟦⟧⟨⟩⟪⟫⟬⟭⟮⟯⦃⦄⦅⦆⦇⦈⦉⦊⦋⦌⦍⦎⦏⦐⦑⦒⦓⦔⦕⦖⦗⦘⧘⧙⧚⧛⧼⧽⸗〰﴾﴿`)));
 
 const LETTER_CHARACTER_CHARS = Array.from(new Set([
@@ -366,13 +1058,15 @@ const MARK_CHARACTER_CHARS = Array.from(new Set([
 ]));
 
 const NUMBER_CHARACTER_CHARS = Array.from(
-  "0123456789²³¹¼½¾٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹๐๑๒๓๔๕๖๗๘๙⁰⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞①②③④⑤⑥⑦⑧⑨⓪➀➁➂➃➄➅➆➇➈➉➊➋➌➍➎➏➐➑➒➓𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗𝟘𝟙𝟚𝟛𝟜𝟝𝟞𝟟𝟠𝟡𝟢𝟣𝟤𝟥𝟦𝟧𝟨𝟩𝟪𝟫𝟬𝟭𝟮𝟯𝟰𝟱𝟲𝟳𝟴𝟵𝟶𝟷𝟸𝟹𝟺𝟻𝟼𝟽𝟾𝟿"
+  "0123456789²³¹¼½¾٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹๐๑๒๓๔๕๖๗๘๙0⁴⁵⁶⁷⁸9₀₁₂₃₄₅₆₇₈₉⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞①②③④⑤⑥⑦⑧⑨⓪➀➁➂➃➄➅➆➇➈➉➊➋➌➍➎➏➐➑➒➓𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗𝟘𝟙𝟚𝟛𝟜𝟝𝟞𝟟𝟠𝟡𝟢𝟣𝟤𝟥𝟦𝟧𝟨𝟩𝟪𝟫𝟬𝟭ट८९"
 );
 
-const PHONETICAL_CHARACTER_CHARS = Array.from(String.raw`pbtdʈɖcɟkɡqɢʔmɱnɳɲŋɴrʀɾɽɸβfvθðszʃʒʂʐçʝxɣχʁħʕhɦɬɮʋɹɻjɰlɭʎʟƥɓƭɗƈʄƙɠʠʛʍwɥʜʡʢɧʘǀǃǂǁɺɕʑⱱʇʗʖʆʓɼˢƫɫgʦʣʧʤʨʥᶿᵊᶑƻʞˣƞƛλžšǰčieɛaɑɔouyøœɶɒʌɤɯɨʉɪʏʊəɵɐæɜɚıɞʚɘɷɩʼ̥̬̊ʰ̤̰̼̪̺̻̹̜̟̠̘̙̈̽˞ʷʲˠˤ̃ⁿˡ̴̝̚˔̞˕̢̩̯͜͡˹,ʻ̇˗˖ʸ̡̣̫ˈˌːˑ̆.|‖‿↗↘̋́̄̀̏ꜛꜜ˥˦˧˨˩̌̂᷄᷅᷈̑ˇˆ̖ˎ̗ˏʭʩʪʫ❍*VFWCLJŒΘ𝆑𝆏123͍͈͉͆͊͋͌\͎↓↑ˬᶹ͇͢ʶ˭˱˲˷ABDEGHIKMNOPQRSTUVWXYZ[]/(){}`);
+const PHONETICAL_CHARACTER_CHARS =
+ Array.from(String.raw`pbtdʈɖcɟkɡqɢʔmɱnɳɲŋɴrʀɾɽɸβfvθðszʃʒʂʐçʝxɣχʁħʕhɦɬɮʋɹɻjɰlɭʎʟƥɓƭɗƈʄƙɠʠʛʍwɥʜʡʢɧʘǀǃǂǁɺɕʑⱱʇʗʖʆʓɼˢƫɫgʦʣʧʤʨʥᶿᵊᶑƻʞˣƞƛλžšǰčieɛaɑɔouyøœɶɒʌɤɯɨʉɪʏʊəɵɐæɜɚıɞʚɘɷɩʼ̥̬̊ʰ̤̰̼̪̺̻̹̜̟̠̘̙̈̽˞ʷʲˠˤ̃ⁿˡ̴̝̚˔̞˕̢̩̯͜͡˹,ʻ̇˗˖ʸ̡̣̫ˈˌːˑ̆.|‖‿↗↘̋́̄̀̏ꜛꜜ˥˦˧˨˩̌̂᷄᷅᷈̑ˇˆ̖ˎ̗ˏʭʩʪʫ❍*VFWCLJŒΘ𝆑𝆏123͍͈͉͆͊͋͌\͎↓↑ˬᶹ͇͢ʶ˭˱˲˷ABDEGHIKMNOPQRSTUVWXYZ[]/(){}`);
 
 const SPECIAL_CHARACTER_GROUPS = {
   symbol: { label: "Symbol", chars: SPECIAL_CHARACTER_CHARS },
+  greek: { label: "Greek", chars: GREEK_CHARACTER_CHARS },
   punctuation: { label: "Punctuation", chars: PUNCTUATION_CHARACTER_CHARS },
   letter: { label: "Letter", chars: LETTER_CHARACTER_CHARS },
   mark: { label: "Mark", chars: MARK_CHARACTER_CHARS },
@@ -383,6 +1077,8 @@ const SPECIAL_CHARACTER_GROUPS = {
 const characterCode = (char) =>
   `U+${char.codePointAt(0).toString(16).toUpperCase().padStart(4, "0")}`;
 
+const symbolFallback = (item) => item?.fallback || item?.d || item?.op || "";
+
 const charFromCode = (value) => {
   const hex = String(value).trim().replace(/^U\+/i, "").replace(/[^0-9a-f]/gi, "");
   if (!hex) return "";
@@ -390,44 +1086,6 @@ const charFromCode = (value) => {
   if (!Number.isFinite(codePoint) || codePoint < 0 || codePoint > 0x10FFFF) return "";
   return String.fromCodePoint(codePoint);
 };
-
-// ════════════════════════════════════════════════════════════════════════════
-// Modal Shell — premium window chrome
-// ════════════════════════════════════════════════════════════════════════════
-function SymbolBtn({ item, onInsert, theme = "blue" }) {
-  const [hov, setHov] = useState(false);
-
-  const isGreen = theme === "green";
-
-  return (
-    <button
-      type="button"
-      title={item.t}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={() => onInsert(item.l)}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        minWidth: isGreen ? 50 : 40,
-        height: 30,
-        padding: "3px 6px",
-        background: hov ? (isGreen ? "#f0fdf4" : "#eff6ff") : "#f8fafc",
-        border: `1px solid ${hov ? (isGreen ? "#86efac" : "#93c5fd") : "#e2e8f0"}`,
-        borderRadius: 7,
-        cursor: "pointer",
-        fontSize: "1rem",
-        fontFamily: "serif",
-        color: isGreen ? "#166534" : "#000",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontWeight: 500,
-      }}
-    >
-      {item.d}
-    </button>
-  );
-}
 
 function ModalShell({
   title,
@@ -443,51 +1101,18 @@ function ModalShell({
 
   return createPortal(
     <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 9999,
-        background: "transparent",
-        pointerEvents: "none",
-      }}
+      className="math-modal-overlay"
     >
       <div
-        style={{
-          position: "fixed",
-          right: "calc(100% - 100vw)",
-          bottom: 0,
-          width,
-          maxHeight,
-          background: "#ffffff",
-          borderRadius: 10,
-          overflowX: "hidden",
-          overflowY: "auto",
-          boxShadow:
-            "0 24px 80px rgba(0,0,0,0.4), 0 0 0 1px rgba(0,0,0,0.08)",
-          display: "flex",
-          flexDirection: "column",
-          fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
-          pointerEvents: "auto",
-        }}
+        className="math-modal-shell"
+        style={{ "--modal-width": width, "--modal-max-height": maxHeight }}
       >
         <div
-          style={{
-            background: bg,
-            padding: "1px 8px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            flexShrink: 0,
-            userSelect: "none",
-          }}
+          className="math-modal-titlebar"
+          style={{ "--modal-accent-bg": bg }}
         >
           <span
-            style={{
-              color: "#fff",
-              fontWeight: 700,
-              fontSize: "0.88rem",
-              letterSpacing: "0.02em",
-            }}
+            className="math-modal-title"
           >
             {title}
           </span>
@@ -496,19 +1121,7 @@ function ModalShell({
             type="button"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={onClose}
-            style={{
-              width: 24,
-              height: 24,
-              borderRadius: 6,
-              background: "rgba(255,255,255,0.2)",
-              border: "none",
-              color: "#fff",
-              cursor: "pointer",
-              fontSize: "0.85rem",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+            className="math-modal-close"
           >
             ✕
           </button>
@@ -521,18 +1134,82 @@ function ModalShell({
   );
 }
 
+function FloatingPanel({ anchorRef, open, className, children, align = "right", offset = 6 }) {
+  const panelRef = useRef(null);
+  const [style, setStyle] = useState({
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: "auto",
+    bottom: "auto",
+    zIndex: 10020,
+    visibility: "hidden",
+  });
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    let frame = 0;
+    const update = () => {
+      const anchor = anchorRef.current;
+      if (!anchor) return;
+
+      const anchorRect = anchor.getBoundingClientRect();
+      const panel = panelRef.current;
+      const panelWidth = panel?.offsetWidth || 0;
+      const panelHeight = panel?.offsetHeight || 0;
+      const viewportPadding = 8;
+      const preferredLeft = align === "right"
+        ? anchorRect.right - panelWidth
+        : anchorRect.left;
+
+      const left = panelWidth
+        ? Math.max(viewportPadding, Math.min(preferredLeft, window.innerWidth - panelWidth - viewportPadding))
+        : preferredLeft;
+      const belowTop = anchorRect.bottom + offset;
+      const top = panelHeight && belowTop + panelHeight > window.innerHeight - viewportPadding
+        ? Math.max(viewportPadding, anchorRect.top - panelHeight - offset)
+        : belowTop;
+
+      setStyle({
+        position: "fixed",
+        top: `${top}px`,
+        left: `${left}px`,
+        right: "auto",
+        bottom: "auto",
+        zIndex: 10020,
+        visibility: "visible",
+      });
+    };
+
+    update();
+    frame = window.requestAnimationFrame(update);
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [align, anchorRef, offset, open]);
+
+  if (!open) return null;
+
+  return createPortal(
+    <div ref={panelRef} className={className} style={style}>
+      {children}
+    </div>,
+    document.body
+  );
+}
+
 // ── Small symbol button inside modals ─────────────────────────────────────────
 const SB = ({children,onClick,title,active,color="#000",bg="#f8f9fa",activeBg="#dbeafe"}) => {
-  const [hov,setHov] = useState(false);
   return (
     <button type="button" title={title} onClick={onClick}
-      onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
-      style={{minWidth:28,height:26,padding:"0 5px",
-        background:active?activeBg:hov?"#f0f0f0":bg,
-        border:`1px solid ${active?"#93c5fd":hov?"#d0d0d0":"transparent"}`,
-        borderRadius:5,cursor:"pointer",fontSize:"0.75rem",fontFamily:"serif",
-        display:"flex",alignItems:"center",justifyContent:"center",
-        color,flexShrink:0,transition:"all 0.1s",fontWeight:500}}>
+      className={`modal-small-symbol ${active ? "active" : ""}`}
+      style={{ "--symbol-color": color, "--symbol-bg": bg, "--symbol-active-bg": activeBg }}>
       {children}
     </button>
   );
@@ -541,25 +1218,602 @@ const SB = ({children,onClick,title,active,color="#000",bg="#f8f9fa",activeBg="#
 const RIBBON_MINI = {
   "Roots & Fractions": "√□",
   "Greek Letters": "α Ω",
+  "Arrow Symbols": "→ ↔",
+  "Scripts & Layouts": "□²",
+  "Brackets & Accents": "(□)",
+  "Large Operators": "Σ U",
   "Calculus": "Σ ∫",
   "Sets & Logic": "∈ ∞",
   "Trigonometry": "sin",
   "Matrices & Vectors": "▦▦",
 };
 
-function RibbonSymbolButton({ item, onInsert, onMatrix }) {
-  const isMatrix = parseMatrixLatex(item.l);
+const chunkRibbonItems = (items, perGroup = 9, perRow = 3) => {
+  const groups = [];
+
+  for (let groupStart = 0; groupStart < items.length; groupStart += perGroup) {
+    const groupItems = items.slice(groupStart, groupStart + perGroup);
+    const rows = [];
+
+    for (let rowStart = 0; rowStart < groupItems.length; rowStart += perRow) {
+      rows.push(groupItems.slice(rowStart, rowStart + perRow));
+    }
+
+    groups.push(rows);
+  }
+
+  return groups;
+};
+
+const nextRibbonGroupItems = (groups, index) => {
+  if (groups.length <= 1) return [];
+  const nextGroup = groups[(index + 1) % groups.length];
+  return nextGroup.flat();
+};
+
+const ribbonPopupItems = (groups, index, popupGroups = []) =>
+  popupGroups.length ? popupGroups[index % popupGroups.length] : nextRibbonGroupItems(groups, index);
+
+function RibbonPopupCluster({
+  group,
+  popupItems = [],
+  classPrefix,
+  buttonClassName,
+  renderItem,
+  onPick,
+  popupTitle = "More symbols",
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef(null);
+  const buttonClass = (item) =>
+    typeof buttonClassName === "function" ? buttonClassName(item) : buttonClassName;
+
+  const pick = (item) => {
+    onPick(item);
+    setOpen(false);
+  };
 
   return (
-    <button
-      type="button"
-      title={item.t}
-      className="math-ribbon-symbol"
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={() => isMatrix ? onMatrix(item.l) : onInsert(item.l)}
-    >
-      {item.d}
-    </button>
+    <div className={`${classPrefix}-cluster ribbon-popup-cluster`}>
+      {group.map((row, rowIndex) => (
+        <div className={`${classPrefix}-row`} key={`${classPrefix}-row-${rowIndex}`}>
+          {row.map((item, itemIndex) => (
+            <button
+              key={`${item.t || item.d || item.op || item.icon}-${item.l}-${rowIndex}-${itemIndex}`}
+              type="button"
+              title={item.t}
+              className={buttonClass(item)}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => pick(item)}
+            >
+              {renderItem(item)}
+            </button>
+          ))}
+        </div>
+      ))}
+
+      {popupItems.length > 0 && (
+        <>
+          <button
+            ref={triggerRef}
+            type="button"
+            title={popupTitle}
+            aria-expanded={open}
+            className={`ribbon-popup-trigger ${open ? "active" : ""}`}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setOpen(value => !value)}
+          >
+            ▾
+          </button>
+
+          <FloatingPanel anchorRef={triggerRef} open={open} className="ribbon-popup-panel" offset={4}>
+              {popupItems.map((item, index) => (
+                <button
+                  key={`popup-${item.t || item.d || item.op || item.icon}-${item.l}-${index}`}
+                  type="button" 
+                  title={item.t}
+                  className={`ribbon-popup-item ${buttonClass(item)}`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => pick(item)}
+                >
+                  {renderItem(item)}
+                </button>
+              ))}
+          </FloatingPanel>
+        </>
+      )}
+    </div>
+  );
+}
+
+function GenericSymbolPalette({ items, popupItems = [], onInsert, onMatrix }) {
+  const groups = chunkRibbonItems(items);
+  const popupGroups = chunkRibbonItems(popupItems).map(group => group.flat());
+  const handleInsert = (item) => {
+    if (parseMatrixLatex(item.l) && onMatrix) onMatrix(item.l);
+    else onInsert(item.l, symbolFallback(item));
+  };
+
+  return (
+    <div className="generic-symbol-board" aria-label="Math symbols">
+      {groups.map((group, groupIndex) => (
+        <RibbonPopupCluster
+          key={`generic-symbol-group-${groupIndex}`}
+          group={group}
+          popupItems={ribbonPopupItems(groups, groupIndex, popupGroups)}
+          classPrefix="generic-symbol"
+          buttonClassName="math-ribbon-symbol"
+          renderItem={(item) => item.d}
+          onPick={handleInsert}
+          popupTitle="More symbols in this section"
+        />
+      ))}
+    </div>
+  );
+}
+
+function ArrowSymbolPalette({ onInsert, onPlainInsert }) {
+  const groups = ARROW_SYMBOL_GROUPS;
+  const handleInsert = (item) => {
+    if (item.plain) onPlainInsert(item.l);
+    else onInsert(item.l, symbolFallback(item));
+  };
+
+  return (
+    <div className="arrow-symbol-board" aria-label="Arrow symbols">
+      {groups.map((group, groupIndex) => (
+        <RibbonPopupCluster
+          key={`arrow-group-${groupIndex}`}
+          group={group}
+          popupItems={ribbonPopupItems(groups, groupIndex, ARROW_POPUP_SYMBOL_GROUPS)}
+          classPrefix="arrow-symbol"
+          buttonClassName={(item) => `arrow-symbol-button ${item.template ? "template" : ""}`}
+          renderItem={(item) => item.d}
+          onPick={handleInsert}
+          popupTitle="More arrow symbols"
+        />
+      ))}
+    </div>
+  );
+}
+
+function CalcBox({ small = false }) {
+  return <span className={`calculus-template-box ${small ? "small" : ""}`} />;
+}
+
+function CalculusIcon({ item }) {
+  switch (item.icon) {
+    case "intLimits":
+      return (
+        <span className="calculus-int-template">
+          <CalcBox small />
+          <span className="calculus-int-symbol">∫</span>
+          <CalcBox small />
+        </span>
+      );
+    case "intLower":
+      return (
+        <span className="calculus-int-template lower-only">
+          <span className="calculus-int-symbol">∫</span>
+          <CalcBox small />
+        </span>
+      );
+    case "intDifferential":
+      return (
+        <span className="calculus-int-template differential">
+          <span className="calculus-int-symbol">∫</span>
+          <span>d</span>
+          <CalcBox small />
+        </span>
+      );
+    case "intLimitsDifferential":
+      return (
+        <span className="calculus-int-template differential">
+          <CalcBox small />
+          <span className="calculus-int-symbol">∫</span>
+          <CalcBox small />
+          <span>d</span>
+          <CalcBox small />
+        </span>
+      );
+    case "intDoubleDifferential":
+      return (
+        <span className="calculus-int-template differential">
+          <span className="calculus-int-symbol">∫</span>
+          <span>d</span>
+          <CalcBox small />
+          <span>d</span>
+          <CalcBox small />
+        </span>
+      );
+    case "int":
+      return <span className="calculus-large-op">∫</span>;
+    case "dOverDx":
+      return (
+        <span className="calculus-frac">
+          <span>d</span>
+          <span className="calculus-frac-line" />
+          <span>d<CalcBox small /></span>
+        </span>
+      );
+    case "partialOverDx":
+      return (
+        <span className="calculus-frac">
+          <span>∂</span>
+          <span className="calculus-frac-line" />
+          <span>∂<CalcBox small /></span>
+        </span>
+      );
+    case "secondDerivative":
+      return (
+        <span className="calculus-frac">
+          <span>d²</span>
+          <span className="calculus-frac-line" />
+          <span>d<CalcBox small />²</span>
+        </span>
+      );
+    case "limToInfinity":
+      return (
+        <span className="calculus-lim-template">
+          <span>lim</span>
+          <span><CalcBox small />→∞</span>
+        </span>
+      );
+    case "limBox":
+      return (
+        <span className="calculus-lim-template">
+          <span>lim</span>
+          <CalcBox small />
+        </span>
+      );
+    case "nablaCross":
+      return <span className="calculus-inline-template">∇×<CalcBox small /></span>;
+    case "nablaDot":
+      return <span className="calculus-inline-template">∇·<CalcBox small /></span>;
+    case "nablaBox":
+      return <span className="calculus-inline-template">∇<CalcBox small /></span>;
+    case "deltaBox":
+      return <span className="calculus-inline-template">Δ<CalcBox small /></span>;
+    case "logBase":
+      return <span className="calculus-log-base">log<CalcBox small /></span>;
+    default:
+      return item.d;
+  }
+}
+
+function CalculusSymbolPalette({ onInsert, onPlainInsert }) {
+  const groups = CALCULUS_SYMBOL_GROUPS;
+  const handleInsert = (item) => {
+    if (item.plain) onPlainInsert(item.l);
+    else onInsert(item.l, symbolFallback(item));
+  };
+
+  return (
+    <div className="calculus-symbol-board" aria-label="Calculus symbols">
+      {groups.map((group, groupIndex) => (
+        <RibbonPopupCluster
+          key={`calculus-group-${groupIndex}`}
+          group={group}
+          popupItems={ribbonPopupItems(groups, groupIndex, CALCULUS_POPUP_SYMBOL_GROUPS)}
+          classPrefix="calculus-symbol"
+          buttonClassName={(item) => `calculus-symbol-button ${item.icon ? "template" : ""}`}
+          renderItem={(item) => <CalculusIcon item={item} />}
+          onPick={handleInsert}
+          popupTitle="More calculus symbols"
+        />
+      ))}
+    </div>
+  );
+}
+
+function ScriptBox({ small = false, tall = false }) {
+  const classes = ["script-layout-box"];
+  if (small) classes.push("small");
+  if (tall) classes.push("tall");
+  return <span className={classes.join(" ")} />;
+}
+
+function ScriptLayoutIcon({ item }) {
+  switch (item.icon) {
+    case "fraction":
+      return (
+        <span className="script-layout-fraction">
+          <ScriptBox />
+          <span className="script-layout-line" />
+          <ScriptBox />
+        </span>
+      );
+    case "smallFraction":
+      return (
+        <span className="script-layout-fraction small">
+          <ScriptBox small />
+          <span className="script-layout-line short" />
+          <ScriptBox small />
+        </span>
+      );
+    case "slashFraction":
+      return <span className="script-layout-inline"><ScriptBox />/<ScriptBox /></span>;
+    case "bevelFraction":
+      return <span className="script-layout-inline small"><ScriptBox small />⁄<ScriptBox small /></span>;
+    case "stackedFraction":
+      return (
+        <span className="script-layout-fraction nested">
+          <span className="script-layout-fraction small">
+            <ScriptBox small />
+            <span className="script-layout-line short" />
+            <ScriptBox small />
+          </span>
+          <span className="script-layout-line" />
+          <ScriptBox small />
+        </span>
+      );
+    case "sqrt":
+      return <span className="script-layout-root">√<span className="script-layout-root-line"><ScriptBox /></span></span>;
+    case "nthRoot":
+      return <span className="script-layout-root nth"><ScriptBox small />√<span className="script-layout-root-line"><ScriptBox /></span></span>;
+    case "rootFraction":
+      return (
+        <span className="script-layout-fraction root-fraction">
+          <span className="script-layout-root">√<span className="script-layout-root-line"><ScriptBox small /></span></span>
+          <span className="script-layout-line" />
+          <ScriptBox small />
+        </span>
+      );
+    case "power":
+      return <span className="script-layout-script"><ScriptBox /><span className="script-layout-script-stack upper"><ScriptBox small /></span></span>;
+    case "subscript":
+      return <span className="script-layout-script"><ScriptBox /><span className="script-layout-script-stack lower"><ScriptBox small /></span></span>;
+    case "subsup":
+      return <span className="script-layout-script"><ScriptBox /><span className="script-layout-script-stack"><ScriptBox small /><ScriptBox small /></span></span>;
+    case "leftSup":
+      return <span className="script-layout-script left"><span className="script-layout-script-stack upper"><ScriptBox small /></span><ScriptBox /></span>;
+    case "leftSub":
+      return <span className="script-layout-script left"><span className="script-layout-script-stack lower"><ScriptBox small /></span><ScriptBox /></span>;
+    case "leftSubsup":
+    case "prescript":
+      return <span className="script-layout-script left"><span className="script-layout-script-stack"><ScriptBox small /><ScriptBox small /></span><ScriptBox /></span>;
+    case "rightSup":
+      return <span className="script-layout-script"><ScriptBox /><span className="script-layout-script-stack upper"><ScriptBox small /></span></span>;
+    case "rightSub":
+      return <span className="script-layout-script"><ScriptBox /><span className="script-layout-script-stack lower"><ScriptBox small /></span></span>;
+    case "rightSubsup":
+      return <span className="script-layout-script"><ScriptBox /><span className="script-layout-script-stack"><ScriptBox small /><ScriptBox small /></span></span>;
+    case "verticalDots":
+      return <span className="script-layout-dots">⋮</span>;
+    case "matrixColumn":
+      return <span className="script-layout-stack"><ScriptBox small /><ScriptBox small /></span>;
+    case "threeStack":
+      return <span className="script-layout-stack"><ScriptBox small /><ScriptBox small /><ScriptBox small /></span>;
+    case "caseStack":
+      return <span className="script-layout-case">{"{"}<span className="script-layout-stack"><ScriptBox small /><ScriptBox small /></span></span>;
+    case "dottedStack":
+      return <span className="script-layout-stack"><ScriptBox small /><span className="script-layout-mini-dots">⋮</span><ScriptBox small /></span>;
+    case "overBox":
+      return <span className="script-layout-stack"><ScriptBox small /><ScriptBox /></span>;
+    case "underBox":
+      return <span className="script-layout-stack"><ScriptBox /><ScriptBox small /></span>;
+    case "boxedTall":
+      return <span className="script-layout-framed"><ScriptBox tall /></span>;
+    case "sideBox":
+      return <span className="script-layout-inline"><ScriptBox /><ScriptBox /></span>;
+    case "doubleBox":
+      return <span className="script-layout-framed"><span className="script-layout-framed inner"><ScriptBox small /></span></span>;
+    case "smallRow":
+      return <span className="script-layout-inline"><ScriptBox small /><ScriptBox small /></span>;
+    case "smallPair":
+      return <span className="script-layout-inline spaced"><ScriptBox small /><ScriptBox small /></span>;
+    case "smallTriple":
+      return <span className="script-layout-inline"><ScriptBox small /><ScriptBox small /><ScriptBox small /></span>;
+    case "threeColumns":
+      return <span className="script-layout-inline"><ScriptBox small /><ScriptBox small /><ScriptBox small /></span>;
+    case "grid":
+      return <span className="script-layout-grid"><ScriptBox small /><ScriptBox small /><ScriptBox small /><ScriptBox small /></span>;
+    case "sumNumerator":
+    case "sumDenominator":
+    case "cubeRoot":
+    case "fourthRoot":
+    case "negativePower":
+      return <RootFractionIcon type={item.icon} />;
+    default:
+      return item.d;
+  }
+}
+
+function ScriptLayoutPalette({ onInsert, onPlainInsert }) {
+  const groups = SCRIPT_LAYOUT_SYMBOL_GROUPS;
+  const handleInsert = (item) => {
+    if (item.plain) onPlainInsert(item.l);
+    else onInsert(item.l, symbolFallback(item));
+  };
+
+  return (
+    <div className="script-layout-board" aria-label="Scripts and layouts">
+      {groups.map((group, groupIndex) => (
+        <RibbonPopupCluster
+          key={`script-layout-group-${groupIndex}`}
+          group={group}
+          popupItems={ribbonPopupItems(groups, groupIndex, SCRIPT_LAYOUT_POPUP_SYMBOL_GROUPS)}
+          classPrefix="script-layout"
+          buttonClassName="script-layout-button"
+          renderItem={(item) => <ScriptLayoutIcon item={item} />}
+          onPick={handleInsert}
+          popupTitle="More script and layout symbols"
+        />
+      ))}
+    </div>
+  );
+}
+
+function BracketBox({ small = false }) {
+  return <span className={`bracket-template-box ${small ? "small" : ""}`} />;
+}
+
+function BracketIcon({ item }) {
+  switch (item.icon) {
+    case "paren":
+      return <span className="bracket-template fence">( <BracketBox /> )</span>;
+    case "abs":
+      return <span className="bracket-template fence">|<BracketBox />|</span>;
+    case "angle":
+      return <span className="bracket-template fence">〈<BracketBox />〉</span>;
+    case "bracket":
+      return <span className="bracket-template fence">[<BracketBox />]</span>;
+    case "norm":
+      return <span className="bracket-template fence">‖<BracketBox />‖</span>;
+    case "brace":
+      return <span className="bracket-template fence">{"{"}<BracketBox />{"}"}</span>;
+    case "floor":
+      return <span className="bracket-template fence">⌊<BracketBox />⌋</span>;
+    case "ceil":
+      return <span className="bracket-template fence">⌈<BracketBox />⌉</span>;
+    case "corner":
+      return <span className="bracket-template fence">⌜<BracketBox />⌝</span>;
+    case "overline":
+      return <span className="bracket-accent overline"><BracketBox /></span>;
+    case "underline":
+      return <span className="bracket-accent underline"><BracketBox /></span>;
+    case "overbrace":
+      return <span className="bracket-accent overbrace"><span>⏞</span><BracketBox /></span>;
+    case "underbrace":
+      return <span className="bracket-accent underbrace"><BracketBox /><span>⏟</span></span>;
+    case "boxed":
+    case "rect":
+      return <span className="bracket-boxed-icon"><BracketBox /></span>;
+    case "sqrtBox":
+      return <span className="bracket-template sqrt">√<span className="bracket-root-line"><BracketBox /></span></span>;
+    case "dot":
+      return <span className="bracket-accent mark"><span>˙</span><BracketBox /></span>;
+    case "ddot":
+      return <span className="bracket-accent mark"><span>¨</span><BracketBox /></span>;
+    case "hat":
+      return <span className="bracket-accent mark"><span>ˆ</span><BracketBox /></span>;
+    case "tilde":
+      return <span className="bracket-accent mark"><span>˜</span><BracketBox /></span>;
+    case "bar":
+      return <span className="bracket-accent mark"><span>¯</span><BracketBox /></span>;
+    case "vec":
+      return <span className="bracket-accent mark"><span>→</span><BracketBox /></span>;
+    case "breve":
+      return <span className="bracket-accent mark"><span>˘</span><BracketBox /></span>;
+    case "check":
+      return <span className="bracket-accent mark"><span>ˇ</span><BracketBox /></span>;
+    case "prime":
+      return <span className="bracket-template prime"><BracketBox />′</span>;
+    case "doublePrime":
+      return <span className="bracket-template prime"><BracketBox />″</span>;
+    case "widehat":
+      return <span className="bracket-accent wide"><span>⌃</span><BracketBox /></span>;
+    case "widetilde":
+      return <span className="bracket-accent wide"><span>∼</span><BracketBox /></span>;
+    case "leftBar":
+      return <span className="bracket-template single">|<BracketBox /></span>;
+    case "rightBar":
+      return <span className="bracket-template single"><BracketBox />|</span>;
+    case "leftBracket":
+      return <span className="bracket-template single">[<BracketBox /></span>;
+    case "rightBracket":
+      return <span className="bracket-template single"><BracketBox />]</span>;
+    case "leftBrace":
+      return <span className="bracket-template single">{"{"}<BracketBox /></span>;
+    case "rightBrace":
+      return <span className="bracket-template single"><BracketBox />{"}"}</span>;
+    case "circleBox":
+      return <span className="bracket-circle-icon"><BracketBox small /></span>;
+    case "squareBox":
+      return <span className="bracket-square-symbol">□</span>;
+    default:
+      return item.d;
+  }
+}
+
+function BracketSymbolPalette({ onInsert, onPlainInsert }) {
+  const groups = BRACKET_SYMBOL_GROUPS;
+  const handleInsert = (item) => {
+    if (item.plain) onPlainInsert(item.l);
+    else onInsert(item.l, symbolFallback(item));
+  };
+
+  return (
+    <div className="bracket-symbol-board" aria-label="Brackets and accents">
+      {groups.map((group, groupIndex) => (
+        <RibbonPopupCluster
+          key={`bracket-group-${groupIndex}`}
+          group={group}
+          popupItems={ribbonPopupItems(groups, groupIndex, BRACKET_POPUP_SYMBOL_GROUPS)}
+          classPrefix="bracket-symbol"
+          buttonClassName={(item) => `bracket-symbol-button ${item.icon ? "template" : ""}`}
+          renderItem={(item) => <BracketIcon item={item} />}
+          onPick={handleInsert}
+          popupTitle="More bracket and accent symbols"
+        />
+      ))}
+    </div>
+  );
+}
+
+function OperatorBox({ small = false }) {
+  return <span className={`large-operator-template-box ${small ? "small" : ""}`} />;
+}
+
+function LargeOperatorIcon({ item }) {
+  switch (item.mode) {
+    case "limits":
+      return (
+        <span className="large-operator-template stacked">
+          <OperatorBox small />
+          <span className="large-operator-symbol">{item.op}</span>
+          <OperatorBox small />
+        </span>
+      );
+    case "upper":
+      return (
+        <span className="large-operator-template side upper">
+          <span className="large-operator-symbol">{item.op}</span>
+          <OperatorBox small />
+        </span>
+      );
+    case "lower":
+      return (
+        <span className="large-operator-template side lower">
+          <span className="large-operator-symbol">{item.op}</span>
+          <OperatorBox small />
+        </span>
+      );
+    case "sideLimits":
+      return (
+        <span className="large-operator-template side-limits">
+          <span className="large-operator-symbol">{item.op}</span>
+          <span className="large-operator-side-stack">
+            <OperatorBox small />
+            <OperatorBox small />
+          </span>
+        </span>
+      );
+    case "large":
+      return <span className="large-operator-symbol solo">{item.op}</span>;
+    default:
+      return <span className="large-operator-symbol">{item.op}</span>;
+  }
+}
+
+function LargeOperatorPalette({ onInsert }) {
+  const groups = LARGE_OPERATOR_SYMBOL_GROUPS;
+
+  return (
+    <div className="large-operator-board" aria-label="Large operators">
+      {groups.map((group, groupIndex) => (
+        <RibbonPopupCluster
+          key={`large-operator-group-${groupIndex}`}
+          group={group}
+          popupItems={ribbonPopupItems(groups, groupIndex, LARGE_OPERATOR_POPUP_SYMBOL_GROUPS)}
+          classPrefix="large-operator"
+          buttonClassName="large-operator-button"
+          renderItem={(item) => <LargeOperatorIcon item={item} />}
+          onPick={(item) => onInsert(item.l, symbolFallback(item))}
+          popupTitle="More large operator symbols"
+        />
+      ))}
+    </div>
   );
 }
 
@@ -648,6 +1902,14 @@ function RootFractionIcon({ type }) {
       return (
         <span className="root-template-icon root-template-root nth">
           <span className="root-template-index">3</span>
+          <span className="root-template-radical">√</span>
+          <TemplateBox />
+        </span>
+      );
+    case "fourthRoot":
+      return (
+        <span className="root-template-icon root-template-root nth">
+          <span className="root-template-index">4</span>
           <span className="root-template-radical">√</span>
           <TemplateBox />
         </span>
@@ -754,7 +2016,7 @@ function RootFractionTemplateButton({ item, onPick }) {
       title={item.t}
       className="root-template-button"
       onMouseDown={(e) => e.preventDefault()}
-      onClick={() => onPick(item.l)}
+      onClick={() => onPick(item.l, symbolFallback(item))}
     >
       <RootFractionIcon type={item.icon} />
     </button>
@@ -763,8 +2025,9 @@ function RootFractionTemplateButton({ item, onPick }) {
 
 function RootFractionPalette({ onInsert }) {
   const [open, setOpen] = useState(false);
-  const pick = (latex) => {
-    onInsert(latex);
+  const triggerRef = useRef(null);
+  const pick = (latex, fallbackText = "") => {
+    onInsert(latex, fallbackText);
     setOpen(false);
   };
 
@@ -776,6 +2039,7 @@ function RootFractionPalette({ onInsert }) {
 
       <div className="root-template-more">
         <button
+          ref={triggerRef}
           type="button"
           title="More roots and fractions"
           className={`root-template-button root-template-more-trigger ${open ? "active" : ""}`}
@@ -788,13 +2052,11 @@ function RootFractionPalette({ onInsert }) {
           </span>
         </button>
 
-        {open && (
-          <div className="root-template-popup">
+        <FloatingPanel anchorRef={triggerRef} open={open} className="root-template-popup" offset={4}>
             {ROOT_FRACTION_EXTRA.map((item) => (
               <RootFractionTemplateButton key={item.t} item={item} onPick={pick} />
             ))}
-          </div>
-        )}
+        </FloatingPanel>
       </div>
     </div>
   );
@@ -802,14 +2064,14 @@ function RootFractionPalette({ onInsert }) {
 
 function MatrixButtonIcon() {
   return (
-    <span style={{display:"inline-flex",alignItems:"center",gap:3}}>
-      <span style={{fontSize:"1.1rem",lineHeight:1,color:"#1f7a38"}}>[</span>
-      <span style={{display:"grid",gridTemplateColumns:"repeat(2,5px)",gap:2}}>
+    <span className="matrix-button-icon">
+      <span className="matrix-button-bracket">[</span>
+      <span className="matrix-button-grid">
         {[0,1,2,3].map(i => (
-          <span key={i} style={{width:5,height:5,border:"1px solid #1f7a38",background:"#f8fff8"}} />
+          <span key={i} className="matrix-button-cell" />
         ))}
       </span>
-      <span style={{fontSize:"1.1rem",lineHeight:1,color:"#1f7a38"}}>]</span>
+      <span className="matrix-button-bracket">]</span>
     </span>
   );
 }
@@ -818,6 +2080,7 @@ function MatrixPicker({ onPick }) {
   const [open, setOpen] = useState(false);
   const [hover, setHover] = useState({ rows: 3, cols: 3 });
   const [env, setEnv] = useState("bmatrix");
+  const triggerRef = useRef(null);
   const maxRows = 6;
   const maxCols = 6;
 
@@ -834,53 +2097,38 @@ function MatrixPicker({ onPick }) {
   };
 
   return (
-    <div style={{position:"relative",display:"inline-flex"}}>
+    <div className="matrix-picker">
       <button
+        ref={triggerRef}
         type="button"
         title="Matrix"
         onMouseDown={(e)=>e.preventDefault()}
         onClick={()=>setOpen(value=>!value)}
-        style={{
-          minWidth:62,height:30,padding:"2px 8px",
-          background:open?"#dbeafe":"#eef6ff",
-          border:`1.5px solid ${open?"#2563eb":"#93c5fd"}`,
-          borderRadius:7,cursor:"pointer",
-          display:"flex",alignItems:"center",justifyContent:"center",gap:4,
-          boxShadow:open?"0 1px 5px rgba(37,99,235,0.25)":"none",
-        }}
+        className={`matrix-picker-trigger ${open ? "open" : ""}`}
       >
         <MatrixButtonIcon />
-        <span style={{fontSize:"0.7rem",color:"#174ea6",fontWeight:800}}>▾</span>
+        <span className="matrix-picker-caret">▾</span>
       </button>
 
-      {open && (
-        <div
-          style={{
-            position:"absolute",top:"calc(100% + 5px)",left:0,zIndex:100,
-            width:120,padding:2,background:"#f8fbff",
-            border:"1px solid #9fb4c7",borderRadius:7,
-            boxShadow:"0 12px 28px rgba(15,23,42,0.2)",
-          }}
-        >
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:3,marginBottom:6}}>
+      <FloatingPanel anchorRef={triggerRef} open={open} className="matrix-picker-panel" align="left" offset={5}>
+          <div className="matrix-picker-env-grid">
             {envButtons.map(button => (
               <button
                 key={button.env}
                 type="button"
                 title={button.title}
                 onClick={()=>setEnv(button.env)}
-                style={{
-                  height:20,border:`1px solid ${env===button.env?"#2563eb":"#cbd5e1"}`,
-                  borderRadius:5,background:env===button.env?"#dbeafe":"#fff",
-                  color:"#0f172a",cursor:"pointer",fontSize:"0.58rem",fontFamily:"serif",
-                }}
+                className={`matrix-picker-env-button ${env===button.env ? "active" : ""}`}
               >
                 {button.label}
               </button>
             ))}
           </div>
 
-          <div style={{display:"grid",gridTemplateColumns:`repeat(${maxCols}, 13px)`,gap:2}}>
+          <div
+            className="matrix-picker-grid"
+            style={{ "--matrix-picker-cols": maxCols }}
+          >
             {Array.from({ length: maxRows * maxCols }, (_, index) => {
               const row = Math.floor(index / maxCols) + 1;
               const col = (index % maxCols) + 1;
@@ -894,48 +2142,41 @@ function MatrixPicker({ onPick }) {
                   onMouseEnter={()=>setHover({rows:row,cols:col})}
                   onFocus={()=>setHover({rows:row,cols:col})}
                   onClick={()=>pick(row,col)}
-                  style={{
-                    width:13,height:13,padding:0,border:`1px solid ${active?"#1f7a38":"#b6c7d8"}`,
-                    background:active?"#dff6e6":"#fff",borderRadius:2,cursor:"pointer",
-                  }}
+                  className={`matrix-picker-cell-button ${active ? "active" : ""}`}
                 />
               );
             })}
           </div>
 
-          <div style={{display:"grid",gridTemplateColumns:"1fr 52px",gap:5,alignItems:"center",marginTop:7}}>
-            <label style={{fontSize:"0.72rem",color:"#668296",fontWeight:800}}>Rows:</label>
+          <div className="matrix-picker-fields">
+            <label className="matrix-picker-label">Rows:</label>
             <input
               type="number"
               min={1}
               max={maxRows}
               value={hover.rows}
               onChange={e=>setHover(value=>({...value,rows:clamp(e.target.value,maxRows)}))}
-              style={{height:22,border:"1px solid #b6c7d8",borderRadius:4,padding:"0 4px",fontSize:"0.75rem"}}
+              className="matrix-picker-input"
             />
-            <label style={{fontSize:"0.72rem",color:"#668296",fontWeight:800}}>Columns:</label>
+            <label className="matrix-picker-label">Columns:</label>
             <input
               type="number"
               min={1}
               max={maxCols}
               value={hover.cols}
               onChange={e=>setHover(value=>({...value,cols:clamp(e.target.value,maxCols)}))}
-              style={{height:22,border:"1px solid #b6c7d8",borderRadius:4,padding:"0 4px",fontSize:"0.75rem"}}
+              className="matrix-picker-input"
             />
           </div>
 
           <button
             type="button"
             onClick={()=>pick()}
-            style={{
-              width:"100%",marginTop:7,height:25,border:"none",borderRadius:5,
-              background:"#2563eb",color:"#fff",fontSize:"0.72rem",fontWeight:800,cursor:"pointer",
-            }}
+            className="matrix-picker-insert"
           >
             Insert {hover.rows}×{hover.cols}
           </button>
-        </div>
-      )}
+      </FloatingPanel>
     </div>
   );
 }
@@ -952,7 +2193,9 @@ function SpecialCharacterPicker({ onPick }) {
     if (!open) return;
 
     const closeWhenOutside = (event) => {
-      if (!pickerRef.current?.contains(event.target)) setOpen(false);
+      const target = event.target instanceof Element ? event.target : null;
+      if (target && (pickerRef.current?.contains(target) || target.closest(".special-symbol-panel"))) return;
+      setOpen(false);
     };
     const closeOnEscape = (event) => {
       if (event.key === "Escape") setOpen(false);
@@ -997,8 +2240,7 @@ function SpecialCharacterPicker({ onPick }) {
         Ω
       </button>
 
-      {open && (
-        <div className="special-symbol-panel">
+      <FloatingPanel anchorRef={pickerRef} open={open} className="special-symbol-panel" offset={6}>
           <div className="special-symbol-header">
             <label className="special-symbol-code-label" htmlFor="special-symbol-code">Code:</label>
             <input
@@ -1046,8 +2288,7 @@ function SpecialCharacterPicker({ onPick }) {
               </button>
             ))}
           </div>
-        </div>
-      )}
+      </FloatingPanel>
     </div>
   );
 }
@@ -1073,44 +2314,39 @@ function MatrixEditor({ latex, onChange, inCanvas = false, fontSize = 20 }) {
   };
 
   return (
-    <div style={{display:"flex",flexDirection:"column",gap:inCanvas?0:8,width:inCanvas?"fit-content":"100%"}}>
+    <div className={`matrix-editor ${inCanvas ? "in-canvas" : ""}`}>
       {!inCanvas && (
-        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+        <div className="matrix-editor-toolbar">
           {envButtons.map(button => (
             <button
               key={button.env}
               type="button"
               title={button.title}
               onClick={()=>update(matrix.rows, button.env)}
-              style={{
-                height:26,padding:"0 8px",
-                border:`1px solid ${matrix.env===button.env?"#2563eb":"#cbd5e1"}`,
-                borderRadius:5,background:matrix.env===button.env?"#dbeafe":"#fff",
-                color:"#0f172a",cursor:"pointer",fontSize:"0.7rem",fontFamily:"serif",
-              }}
+              className={`matrix-editor-env-button ${matrix.env===button.env ? "active" : ""}`}
             >
               {button.label}
             </button>
           ))}
 
-          <span style={{marginLeft:4,fontSize:"0.7rem",color:"#64748b",fontWeight:800}}>Rows</span>
+          <span className="matrix-editor-label offset">Rows</span>
           <input
             type="number"
             min={1}
             max={maxSize}
             value={matrix.rows.length}
             onChange={e=>updateSize(e.target.value, matrix.colCount)}
-            style={{width:46,height:25,border:"1px solid #cbd5e1",borderRadius:5,fontSize:"0.72rem",padding:"0 4px"}}
+            className="matrix-editor-size-input"
           />
 
-          <span style={{fontSize:"0.7rem",color:"#64748b",fontWeight:800}}>Columns</span>
+          <span className="matrix-editor-label">Columns</span>
           <input
             type="number"
             min={1}
             max={maxSize}
             value={matrix.colCount}
             onChange={e=>updateSize(matrix.rows.length, e.target.value)}
-            style={{width:46,height:25,border:"1px solid #cbd5e1",borderRadius:5,fontSize:"0.72rem",padding:"0 4px"}}
+            className="matrix-editor-size-input"
           />
         </div>
       )}
@@ -1118,7 +2354,7 @@ function MatrixEditor({ latex, onChange, inCanvas = false, fontSize = 20 }) {
       <div className={`meq-matrix-wrap meq-matrix-edit-wrap meq-matrix-${matrix.env}`}>
         <div
           className="meq-matrix-edit-grid"
-          style={{gridTemplateColumns:`repeat(${matrix.colCount}, ${cellSize}px)`}}
+          style={{ "--matrix-cols": matrix.colCount, "--matrix-cell-size": `${cellSize}px` }}
         >
           {matrix.rows.map((row, rowIndex) =>
             row.map((cell, colIndex) => (
@@ -1127,10 +2363,10 @@ function MatrixEditor({ latex, onChange, inCanvas = false, fontSize = 20 }) {
                 value={cell}
                 aria-label={`Matrix row ${rowIndex + 1} column ${colIndex + 1}`}
                 onChange={e=>updateCell(rowIndex, colIndex, e.target.value)}
+                className="matrix-editor-cell-input"
                 style={{
-                  width:inputSize,height:inputSize,border:"1.4px solid #1f7a38",borderRadius:3,
-                  background:"#fff",color:"#166534",textAlign:"center",
-                  fontFamily:"serif",fontSize:(inCanvas ? fontSize * 0.9 : 14) + "px",outline:"none",
+                  "--matrix-input-size": `${inputSize}px`,
+                  "--matrix-input-font-size": `${inCanvas ? fontSize * 0.9 : 14}px`,
                 }}
               />
             ))
@@ -1166,39 +2402,35 @@ function EquationArea({ accent="blue", lines, setLines, activeLine, setActiveLin
   return (
     <div
       dir={textDirection}
-      style={{display:"flex",background:"#ffffff",flex:1,overflow:"hidden",minHeight,direction:textDirection}}
+      className="equation-area"
+      style={{ "--equation-area-min-height": `${minHeight}px` }}
     >
       {/* Equation lines */}
-      <div style={{
-        flex:1,overflowY:"auto",paddingTop:6,paddingBottom:16,cursor:"text",
-        direction:textDirection,textAlign:isRtl ? "right" : "left",
-      }}>
+      <div className="equation-area-scroll">
         {editingMatrix ? (
-          <div style={{padding:"14px 18px",minHeight:minHeight - 22,display:"flex",justifyContent:isRtl ? "flex-end" : "flex-start"}}>
+          <div
+            className="equation-matrix-canvas"
+            style={{ "--equation-matrix-min-height": `${minHeight - 22}px` }}
+          >
             <MatrixEditor latex={matrixLatex} onChange={setMatrixLatex} inCanvas fontSize={fontSize} />
           </div>
         ) : !MQ && (
-          <div style={{padding:"16px 20px",color:"#9ca3af",fontStyle:"italic",fontSize:"0.85rem"}}>
+          <div className="equation-loading">
             Loading equation editor…
           </div>
         )}
         {!editingMatrix && MQ && lines.map((_,i)=>(
           <div key={i} onClick={()=>setActiveLine(i)}
-            style={{display:"flex",alignItems:"center",minHeight:46,
-              paddingLeft:isRtl ? 10 : 12,paddingRight:isRtl ? 12 : 10,cursor:"text",position:"relative",
-              background:"transparent",
-              transition:"all 0.12s",boxSizing:"border-box",direction:textDirection}}>
+            className="equation-line-row">
             <span ref={el=>lineRefs.current[i]=el}
               onKeyDown={e=>handleKey(e,i)}
-              style={{
-                display:"block",flex:1,fontSize:fontSize+"px",lineHeight:1,minHeight:36,
-                direction:textDirection,textAlign:isRtl ? "right" : "left",
-              }}/>
+              className="equation-line-field"
+              style={{ "--equation-line-font-size": `${fontSize}px` }}/>
           </div>
         ))}
         {/* Empty space to click and add lines */}
         {!editingMatrix && MQ && (
-          <div style={{padding:"6px 14px",textAlign:isRtl ? "right" : "left"}}>
+          <div className="equation-add-line">
             <button type="button"
               onClick={()=>{
                 setLines(p=>[...p,""]);
@@ -1206,9 +2438,7 @@ function EquationArea({ accent="blue", lines, setLines, activeLine, setActiveLin
                 lineRefs.current.splice(lines.length);
                 setActiveLine(lines.length);
               }}
-              style={{background:"none",border:"none",cursor:"pointer",
-                fontSize:"0.72rem",color:"#9ca3af",padding:"2px 0",
-                display:"flex",alignItems:"center",gap:4}}>
+              className="equation-add-line-button">
               
             </button>
           </div>
@@ -1262,18 +2492,27 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
     setTimeout(()=>mqRefs.current[activeLine]?.focus(),30);
   },[activeLine,lines.length,matrixLatex]);
 
-  const ins = l => {
+  const ins = (l, fallbackText = "") => {
+    if (parseMatrixLatex(l)) {
+      setMatrixLatex(l);
+      setLines([""]);
+      mqRefs.current=[];
+      lineRefs.current=[];
+      setActiveLine(0);
+      return;
+    }
+
     if (matrixLatex) {
       setMatrixLatex("");
       setLines([""]);
       mqRefs.current=[];
       lineRefs.current=[];
       setActiveLine(0);
-      setTimeout(()=>mqInsert(mqRefs.current[0], l),60);
+      setTimeout(()=>mqInsert(mqRefs.current[0], l, fallbackText),60);
       return;
     }
     setMatrixLatex("");
-    mqInsert(mqRefs.current[activeLine], l);
+    mqInsert(mqRefs.current[activeLine], l, fallbackText);
   };
   const insertSpecialChar = char => {
     if (matrixLatex) {
@@ -1303,6 +2542,11 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
   const full = matrixLatex || lines.join(" \\\\ ");
   const has  = matrixLatex.trim()!=="" || lines.some(l=>l.trim()!=="");
   const isRootsGroup = MATH_GROUPS[grp].label === "Roots & Fractions";
+  const isArrowGroup = MATH_GROUPS[grp].label === "Arrow Symbols";
+  const isScriptLayoutGroup = MATH_GROUPS[grp].label === "Scripts & Layouts";
+  const isBracketGroup = MATH_GROUPS[grp].label === "Brackets & Accents";
+  const isLargeOperatorGroup = MATH_GROUPS[grp].label === "Large Operators";
+  const isCalculusGroup = MATH_GROUPS[grp].label === "Calculus";
   const isMatrixGroup = MATH_GROUPS[grp].label === "Matrices & Vectors";
 
   return (
@@ -1310,7 +2554,7 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
       title="√ MathType — Equation Editor"
       accent="blue"
       onClose={onClose}
-      width="min(500px, 100vw)"
+      width="min(560px, calc(100vw - 12px))"
       maxHeight="min(470px, 100vh)"
     >
       <div className="math-ribbon">
@@ -1333,15 +2577,32 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
         </div>
 
         <div className="math-ribbon-body">
-          <div className={`math-ribbon-palette ${isRootsGroup ? "roots-fraction-palette" : ""}`}>
+          <div className={`math-ribbon-palette ${isRootsGroup ? "roots-fraction-palette" : ""} 
+          ${isArrowGroup ? "arrow-symbol-palette" : ""} 
+          ${isScriptLayoutGroup ? "script-layout-palette" : ""}
+           ${isBracketGroup ? "bracket-symbol-palette" : ""}
+            ${isLargeOperatorGroup ? "large-operator-palette" : ""}
+             ${isCalculusGroup ? "calculus-symbol-palette" : ""}`}>
             {isRootsGroup ? (
               <RootFractionPalette onInsert={ins} />
+            ) : isArrowGroup ? (
+              <ArrowSymbolPalette onInsert={ins} onPlainInsert={insertSpecialChar} />
+            ) : isScriptLayoutGroup ? (
+              <ScriptLayoutPalette onInsert={ins} onPlainInsert={insertSpecialChar} />
+            ) : isBracketGroup ? (
+              <BracketSymbolPalette onInsert={ins} onPlainInsert={insertSpecialChar} />
+            ) : isLargeOperatorGroup ? (
+              <LargeOperatorPalette onInsert={ins} />
+            ) : isCalculusGroup ? (
+              <CalculusSymbolPalette onInsert={ins} onPlainInsert={insertSpecialChar} />
             ) : (
               <>
                 {isMatrixGroup && <MatrixPicker onPick={chooseMatrix} />}
-                {MATH_GROUPS[grp].items.map((it) => (
-                  <RibbonSymbolButton key={`${it.t}-${it.l}`} item={it} onInsert={ins} onMatrix={chooseMatrix} />
-                ))}
+                <GenericSymbolPalette
+                  items={MATH_GROUPS[grp].items}
+                  onInsert={ins}
+                  onMatrix={chooseMatrix}
+                />
               </>
             )}
           </div>
@@ -1357,18 +2618,18 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
                     type="button"
                     title={b.d}
                     className="math-ribbon-mini"
-                    onClick={()=>ins(b.l)}
+                    onClick={()=>ins(b.l, b.d)}
                   >
                     {b.d}
                   </button>
                 ))}
-                <button type="button" title="Bold math" className="math-ribbon-mini rich" onClick={()=>ins("\\mathbf{}")}>
+                <button type="button" title="Bold math" className="math-ribbon-mini rich" onClick={()=>ins("\\mathbf{x}", "B")}>
                   <b>B</b>
                 </button>
-                <button type="button" title="Italic math" className="math-ribbon-mini rich" onClick={()=>ins("\\mathit{}")}>
+                <button type="button" title="Italic math" className="math-ribbon-mini rich" onClick={()=>ins("\\mathit{x}", "I")}>
                   <i>1b</i>
                 </button>
-                <button type="button" title="Blackboard" className="math-ribbon-mini rich" onClick={()=>ins("\\mathbb{}")}>
+                <button type="button" title="Blackboard" className="math-ribbon-mini rich" onClick={()=>ins("\\mathbb{R}", "R")}>
                   T
                 </button>
                 <SpecialCharacterPicker onPick={insertSpecialChar} />
@@ -1414,27 +2675,19 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
         textDirection={editorDirection} />
 
       {/* Bottom status + actions */}
-      <div style={{padding:"8px 14px",display:"flex",alignItems:"center",gap:10,
-        background:"#f8fafc",borderTop:"1px solid #e2e8f0",flexShrink:0}}>
+      <div className="modal-actions-footer">
        
-        <div style={{display:"flex",gap:8,marginLeft:"auto"}}>
-          <button type="button" onClick={onClose}
-            style={{padding:"7px 18px",background:"#fff",border:"1.5px solid #e2e8f0",
-              borderRadius:7,cursor:"pointer",fontSize:"0.82rem",fontWeight:600,color:"#6b7280",
-              transition:"all 0.15s"}}
-            onMouseEnter={e=>{e.currentTarget.style.background="#f8fafc";}}
-            onMouseLeave={e=>{e.currentTarget.style.background="#fff";}}>
-            Cancel
-          </button>
           <button type="button" onClick={()=>has&&onInsert(full)} disabled={!has}
-            style={{padding:"7px 22px",
-              background:has?"linear-gradient(135deg,#3b82f6,#1d4ed8)":"#e5e7eb",
-              border:"none",borderRadius:7,cursor:has?"pointer":"not-allowed",
-              fontSize:"0.82rem",fontWeight:700,color:has?"#fff":"#9ca3af",
-              boxShadow:has?"0 2px 8px rgba(37,99,235,0.4)":"none",
-              transition:"all 0.15s"}}>
+            className="modal-action-button primary blue">
             {submitLabel}
           </button>
+
+        <div className="modal-actions-group">
+          <button type="button" onClick={onClose}
+            className="modal-action-button secondary">
+            Cancel
+          </button>
+          
         </div>
       </div>
     </ModalShell>
@@ -1471,7 +2724,7 @@ function ChemModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
 
   useEffect(()=>{ setTimeout(()=>mqRefs.current[activeLine]?.focus(),30); },[activeLine,lines.length]);
 
-  const ins = l => mqInsert(mqRefs.current[activeLine], l);
+  const ins = (l, fallbackText = "") => mqInsert(mqRefs.current[activeLine], l, fallbackText);
   const clr = () => { setLines([""]); mqRefs.current=[]; lineRefs.current=[]; setActiveLine(0); };
   const full = lines.join(" \\\\ ");
   const has  = lines.some(l=>l.trim()!=="");
@@ -1485,47 +2738,28 @@ function ChemModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
     maxHeight="min(470px, 100vh)"
   >
       {/* Group tabs */}
-      <div style={{display:"flex",gap:3,padding:"8px 10px",
-        background:"#f8fafc",borderBottom:"1px solid #e2e8f0",flexWrap:"wrap",flexShrink:0}}>
+      <div className="chem-symbol-palette">
         {CHEM_GROUPS[grp].items.map((it, i) => (
   <button
     key={i}
     type="button"
     title={it.t}
     onMouseDown={(e) => e.preventDefault()}
-    onClick={() => ins(it.l)}
-    style={{
-      minWidth: 50,
-      height: 40,
-      padding: "3px 8px",
-      background: "#f8fafc",
-      border: "1.5px solid #e2e8f0",
-      borderRadius: 7,
-      cursor: "pointer",
-      fontSize: "0.78rem",
-      fontFamily: "serif",
-      color: "#166534",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontWeight: 500,
-    }}
+    onClick={() => ins(it.l, symbolFallback(it))}
+    className="chem-symbol-button"
   >
     {it.d}
   </button>
 ))}
         <button type="button" onClick={clr}
-          style={{marginLeft:"auto",padding:"5px 12px",background:"#fee2e2",
-            border:"1.5px solid #fca5a5",borderRadius:6,color:"#dc2626",
-            cursor:"pointer",fontSize:"0.75rem",fontWeight:700}}>🗑 Clear</button>
+          className="chem-clear-button">🗑 Clear</button>
       </div>
 
       {/* Compound palette */}
     
 
       {/* Quick chem operators */}
-      <div style={{display:"flex",gap:3,padding:"6px 10px",background:"#f8fafc",
-        borderBottom:"1px solid #e2e8f0",flexWrap:"wrap",alignItems:"center",flexShrink:0}}>
+      <div className="chem-quick-toolbar">
         {[
           {d:"→",l:"\\rightarrow"},{d:"⇌",l:"\\rightleftharpoons"},
           {d:"↑",l:"\\uparrow"},{d:"↓",l:"\\downarrow"},
@@ -1534,36 +2768,28 @@ function ChemModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
           {d:"²⁺",l:"^{2+}"},{d:"²⁻",l:"^{2-}"},
           {d:"Δ",l:"\\Delta"},{d:"°",l:"^{\\circ}"},
         ].map((b,i)=>(
-          <SB key={i} title={b.d} onClick={()=>ins(b.l)} color="#166534" bg="#f0fdf4">{b.d}</SB>
-        ))}
+          <SB key={i} title={b.d} onClick={()=>ins(b.l, b.d)} color="#166534" bg="#f0fdf4">{b.d}</SB>
+        ))}        
         <button type="button" title="Delete last" onClick={()=>mqRefs.current[activeLine]?.keystroke("Backspace")}
-          style={{marginLeft:"auto",padding:"4px 10px",background:"#fff3f3",
-            border:"1.5px solid #fca5a5",borderRadius:5,cursor:"pointer",
-            color:"#e80000",fontSize:"0.75rem",fontWeight:700}}>↩ Backspace</button>
+          className="chem-backspace-button">↩ Backspace</button>
       </div>
 
       <EquationArea accent="green" lines={lines} setLines={setLines}
         activeLine={activeLine} setActiveLine={setActiveLine}
         lineRefs={lineRefs} mqRefs={mqRefs} MQ={MQ} fontSize={15} minHeight={160} />
 
-      <div style={{padding:"8px 14px",display:"flex",alignItems:"center",gap:10,
-        background:"#f8fafc",borderTop:"1px solid #e2e8f0",flexShrink:0}}>
-        <span style={{fontSize:"0.65rem",color:"#010a19",display:"flex",alignItems:"center",gap:6}}>
+      <div className="modal-actions-footer">
+        <span className="chem-footer-status">
          
           
         </span>
-        <div style={{display:"flex",gap:8,marginLeft:"auto"}}>
+        <div className="modal-actions-group push-right">
           <button type="button" onClick={onClose}
-            style={{padding:"7px 18px",background:"#fff",border:"1.5px solid #e2e8f0",
-              borderRadius:7,cursor:"pointer",fontSize:"0.82rem",fontWeight:600,color:"#525866"}}>
+            className="modal-action-button secondary chem">
             Cancel
           </button>
           <button type="button" onClick={()=>has&&onInsert(full)} disabled={!has}
-            style={{padding:"7px 22px",
-              background:has?"linear-gradient(135deg,#22c55e,#15803d)":"#e5e7eb",
-              border:"none",borderRadius:7,cursor:has?"pointer":"not-allowed",
-              fontSize:"0.82rem",fontWeight:700,color:has?"#fff":"#9ca3af",
-              boxShadow:has?"0 2px 8px rgba(22,163,74,0.4)":"none",transition:"all 0.15s"}}>
+            className="modal-action-button primary green">
             {submitLabel}
           </button>
         </div>
@@ -1576,69 +2802,28 @@ function ChemModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
 // Toolbar button component with hover + active + tooltip
 // ════════════════════════════════════════════════════════════════════════════
 function TBtn({ children, onClick, title, active=false, disabled=false, special, wide=false }) {
-  const [hov, setHov] = useState(false);
   const [tip, setTip] = useState(false);
-  const ref = useRef(null);
-  const [tipPos, setTipPos] = useState({left:0});
-
-  const showTip = () => {
-    setTip(true);
-    if (ref.current) {
-      const r = ref.current.getBoundingClientRect();
-      setTipPos({ left: r.width/2 });
-    }
-  };
-
-  let bg = "transparent", border = "transparent", color = "#374151", shadow = "none";
-  if (disabled) { color="#d1d5db"; }
-  else if (special==="math") {
-    bg = hov||active ? "#1d4ed8" : "#2563eb";
-    border = hov ? "#1e40af" : "#2563eb";
-    color = "#fff";
-    shadow = "0 1px 4px rgba(37,99,235,0.4)";
-  } else if (special==="chem") {
-    bg = hov||active ? "#15803d" : "#16a34a";
-    border = hov ? "#166534" : "#16a34a";
-    color = "#fff";
-    shadow = "0 1px 4px rgba(22,163,74,0.4)";
-  } else if (active) {
-    bg="#dbeafe"; border="#93c5fd"; color="#1d4ed8";
-  } else if (hov) {
-    bg="#f1f5f9"; border="#cbd5e1"; color="#1e293b";
-  }
+  const classes = [
+    "editor-tool-button",
+    wide ? "wide" : "",
+    active ? "active" : "",
+    special ? `special-${special}` : "",
+  ].filter(Boolean).join(" ");
 
   return (
-    <div style={{position:"relative",display:"inline-flex",flexShrink:0}} ref={ref}>
+    <div className="editor-tool-wrap">
       <button type="button" onClick={disabled?undefined:onClick}
         title={undefined}
-        onMouseEnter={()=>{ if(!disabled){setHov(true); showTip();} }}
-        onMouseLeave={()=>{ setHov(false); setTip(false); }}
-        style={{
-          height:30, minWidth:wide?60:30, padding:wide?"0 10px":"0 6px",
-          background:bg, border:`1.5px solid ${border}`,
-          borderRadius:6, cursor:disabled?"not-allowed":"pointer",
-          display:"flex",alignItems:"center",justifyContent:"center",gap:4,
-          color, fontSize:"0.8rem", fontWeight:500,
-          boxShadow:shadow, transition:"all 0.12s",
-          opacity:disabled?0.45:1,
-        }}>
+        disabled={disabled}
+        onMouseEnter={()=>{ if(!disabled) setTip(true); }}
+        onMouseLeave={()=>setTip(false)}
+        className={classes}>
         {children}
       </button>
       {/* Tooltip */}
       {tip && title && (
-        <div style={{
-          position:"absolute",top:"calc(100% + 6px)",
-          left:"50%",transform:"translateX(-50%)",
-          background:"#1e293b",color:"#fff",
-          fontSize:"0.65rem",fontWeight:500,
-          padding:"3px 8px",borderRadius:5,
-          whiteSpace:"nowrap",pointerEvents:"none",
-          zIndex:1000,boxShadow:"0 2px 8px rgba(0,0,0,0.3)",
-        }}>
+        <div className="editor-tooltip">
           {title}
-          <div style={{position:"absolute",top:-4,left:"50%",transform:"translateX(-50%)",
-            width:0,height:0,borderLeft:"4px solid transparent",
-            borderRight:"4px solid transparent",borderBottom:"4px solid #1e293b"}}/>
         </div>
       )}
     </div>
@@ -1646,7 +2831,7 @@ function TBtn({ children, onClick, title, active=false, disabled=false, special,
 }
 
 function Sep() {
-  return <div style={{width:1,height:22,background:"#e2e8f0",margin:"0 2px",flexShrink:0}}/>;
+  return <div className="editor-separator"/>;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1755,23 +2940,6 @@ export default function RichTextEditor({
     span.className="meq mqr";
     span.setAttribute("data-l",latex);
     span.setAttribute("data-t",type);
-    span.style.cssText=`
-  display:inline-flex;
-  align-items:center;
-  width:auto;
-  max-width:100%;
-  margin:0 4px;
-  padding:3px 7px;
-   background-color: transparent;
-  border:1.5px solid transparent;
-  border-radius:6px;
-  cursor:pointer;
-  user-select:none;
-  font-size:1rem;
-  line-height:1.4;
-  vertical-align:middle;
-  color:#000;
-`;
     renderStaticEquation(MQ, span, latex);
     if(editTarget?.node&&editorRef.current?.contains(editTarget.node)){
       editTarget.node.replaceWith(span);
@@ -1843,28 +3011,15 @@ export default function RichTextEditor({
         });
       }}
       dangerouslySetInnerHTML={{__html:value}}
-      style={{padding:"10px 14px",background:"var(--bg-elevated)",
-        border:"1px solid var(--border)",borderRadius:"var(--radius-md)",
-        fontSize:"0.95rem",lineHeight:1.8,color:"var(--text-primary)",minHeight:40}}/>
+      className="rich-text-readonly"/>
     );
   }
 
   return(
-    <div style={{
-      display:"flex",flexDirection:"column",
-      border:`1.5px solid ${focused?"#93c5fd":"#e2e8f0"}`,
-      borderRadius:10,overflow:"hidden",background:"#fff",
-      boxShadow:focused?"0 0 0 3px rgba(147,197,253,0.3)":"0 1px 4px rgba(0,0,0,0.06)",
-      transition:"all 0.2s",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
-    }}>
+    <div className={`rich-text-editor ${focused ? "focused" : ""}`}>
 
       {/* ═══ PREMIUM TOOLBAR ═══ */}
-      <div style={{
-        display:"flex",alignItems:"center",gap:3,padding:"6px 10px",
-        background:"linear-gradient(180deg,#f8fafc,#f1f5f9)",
-        borderBottom:"1px solid #e2e8f0",flexWrap:"wrap",
-        boxShadow:"0 1px 3px rgba(0,0,0,0.04)",
-      }}>
+      <div className="rich-text-toolbar">
 
         {/* History */}
         <TBtn title="Undo (Ctrl+Z)" onClick={()=>exec("undo")}>
@@ -1908,10 +3063,7 @@ export default function RichTextEditor({
         <select title="Font size"
           onChange={e=>exec("fontSize",{"12px":"2","14px":"3","16px":"4","18px":"5","20px":"6"}[e.target.value]||"3")}
           defaultValue="14px"
-          style={{height:30,fontSize:"0.72rem",padding:"0 6px",
-            border:"1.5px solid #e2e8f0",borderRadius:6,
-            background:"#fff",cursor:"pointer",color:"#374151",
-            boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
+          className="rich-text-font-size-select">
           {["12px","14px","16px","18px","20px","24px"].map(s=><option key={s} value={s}>{s}</option>)}
         </select>
         <Sep/>
@@ -1940,7 +3092,7 @@ export default function RichTextEditor({
           active={textDirection==="rtl"}
           onClick={toggleDirection}
         >
-          <span style={{fontSize:"0.72rem",fontWeight:800,lineHeight:1}}>RTL</span>
+          <span className="rich-text-rtl-label">RTL</span>
         </TBtn>
         <Sep/>
 
@@ -1966,17 +3118,14 @@ export default function RichTextEditor({
         <Sep/>
 
         {/* Text color */}
-        <div style={{position:"relative",display:"inline-flex"}} title="Text Color">
-          <label style={{height:30,width:30,border:"1.5px solid #e2e8f0",
-            borderRadius:6,cursor:"pointer",overflow:"hidden",display:"flex",
-            alignItems:"center",justifyContent:"center",background:"#fff",
-            boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}
+        <div className="rich-text-color-picker" title="Text Color">
+          <label className="rich-text-color-label"
             title="Text color">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2">
               <path d="M9 3L5 21M15 3l4 18M5 12h14"/>
             </svg>
             <input type="color" onChange={e=>exec("foreColor",e.target.value)}
-              style={{position:"absolute",opacity:0,width:"100%",height:"100%",cursor:"pointer"}}/>
+              className="rich-text-color-input"/>
           </label>
         </div>
 
@@ -1991,15 +3140,15 @@ export default function RichTextEditor({
         {/* ── MATH button ── */}
         <TBtn title="Insert Math Equation" special="math" wide
           onClick={()=>{ saveSelection(); setEditTarget(null); setModal("math"); }}>
-          <span style={{fontSize:"1rem",fontFamily:"Georgia,serif",lineHeight:1}}>√</span>
-          <span style={{fontSize:"0.75rem",fontWeight:700,letterSpacing:"0.02em"}}>Math</span>
+          <span className="rich-text-tool-icon math">√</span>
+          <span className="rich-text-tool-label">Math</span>
         </TBtn>
 
         {/* ── CHEM button ── */}
         <TBtn title="Insert Chemistry Equation" special="chem" wide
           onClick={()=>{ saveSelection(); setEditTarget(null); setModal("chem"); }}>
-          <span style={{fontSize:"0.9rem"}}>⚗</span>
-          <span style={{fontSize:"0.75rem",fontWeight:700,letterSpacing:"0.02em"}}>Chem</span>
+          <span className="rich-text-tool-icon chem">⚗</span>
+          <span className="rich-text-tool-label">Chem</span>
         </TBtn>
       </div>
 
@@ -2015,31 +3164,19 @@ export default function RichTextEditor({
         onClick={handleEditorClick}
         onMouseUp={saveSelection}
         onKeyUp={saveSelection}
-        style={{
-          minHeight:180,whiteSpace:"pre-wrap",wordBreak:"break-word",padding:"14px 16px",
-          fontSize:"0.95rem",color:"#1e293b",lineHeight:1.85,
-          outline:"none",overflowY:"auto",
-          direction:textDirection,
-          textAlign:textDirection==="rtl" ? "right" : "left",
-          fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
-          background:"#fff",
-        }}
+        className="rich-text-content"
+        data-placeholder={placeholder}
       />
 
       {/* Placeholder */}
       {!value && (
-        <div style={{position:"absolute",pointerEvents:"none",padding:"14px 16px",
-          color:"#9ca3af",fontStyle:"italic",fontSize:"0.95rem"}}>
+        <div className="rich-text-placeholder">
         </div>
       )}
 
       {/* ═══ FOOTER ═══ */}
-      <div style={{
-        display:"flex",alignItems:"center",justifyContent:"space-between",
-        padding:"4px 12px",background:"#f8fafc",
-        borderTop:"1px solid #e2e8f0",
-      }}>
-        <div style={{display:"flex",gap:10}}>
+      <div className="rich-text-footer">
+        <div className="rich-text-footer-group">
          
            
         </div>
@@ -2065,15 +3202,6 @@ export default function RichTextEditor({
           onClose={closeModal}
         />
       )}
-
-      <style>{`
-        [contenteditable]:empty:before {
-          content:"${placeholder}";
-          color:#9ca3af;font-style:italic;pointer-events:none;
-        }
-        .meq .mq-root-block { padding:0!important; min-width:0!important; }
-        .meq { vertical-align:middle; }
-      `}</style>
     </div>
   );
 }
