@@ -18,7 +18,7 @@ const configuredOrigins = (process.env.CLIENT_URL || "")
   .split(",")
   .map(origin => origin.trim())
   .filter(Boolean);
-const allowedOrigins = [...new Set([...defaultOrigins, ...configuredOrigins])];
+const allowedOrigins = [...new Set([...defaultOrigins, ...configuredOrigins])]; 
 const vercelPreviewPattern = /^https:\/\/[a-z0-9-]+\.vercel\.app$/i;
 
 // Middleware

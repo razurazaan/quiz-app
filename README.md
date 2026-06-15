@@ -135,6 +135,44 @@ npm run dev
 
 ---
 
+## Vercel Deployment
+
+Use one of these setups:
+
+### Full app from one Vercel project
+- Root Directory: leave empty / repository root
+- Config used: `vercel.json`
+- Install Command: `npm install --prefix client && npm install --prefix server`
+- Build Command: `npm run build --prefix client`
+- Output Directory: `client/dist`
+- Frontend is served from `client/dist`
+- Backend is served under `/api`
+
+### Backend-only Vercel project
+- Root Directory: `server`
+- Config used: `server/vercel.json`
+- Install Command: `npm install`
+- Build Command: `npm run vercel-build`
+- Output Directory: leave empty
+- Backend URL example: `https://your-project.vercel.app/api/health`
+
+Do not use the root install command (`npm install --prefix client && npm install --prefix server`) when the Vercel Root Directory is `server`; from that folder those prefix paths do not exist.
+If that command appears in Vercel logs for a backend-only project, remove the custom Install Command override in Project Settings or replace it with `npm install`.
+
+Set these Environment Variables in Vercel Project Settings:
+
+```env
+MONGO_URI=your-mongodb-atlas-uri
+JWT_SECRET=your-long-random-secret
+JWT_EXPIRE=7d
+NODE_ENV=production
+CLIENT_URL=https://your-frontend-domain.vercel.app
+```
+
+Do not depend on `server/.env` in production. Vercel reads environment variables from the dashboard.
+
+---
+
 ## 🔑 API Routes
 
 ### Auth (`/api/auth`)

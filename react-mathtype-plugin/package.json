@@ -1,0 +1,20 @@
+{
+  "name": "react-mathtype-plugin",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "mathquill": "^0.10.1-a",
+    "react": "^19.2.7"
+  },
+  "devDependencies": {
+    "vite": "^8.0.16"
+  }
+}

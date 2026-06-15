@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import "./MathType.css";
-import "./Matheditor.css";
+import "./MathTypePlugin.css";
 // ── CDN loader ────────────────────────────────────────────────────────────────
 const _cache = {};
 const loadAsset = (type, url) => {
@@ -2324,6 +2324,7 @@ function RootFractionPalette({ onInsert }) {
 function SpecialCharacterPicker({ onPick }) {
   const pickerRef = useRef(null);
   const [open, setOpen] = useState(false);
+
   const [category, setCategory] = useState("symbol");
   const [selected, setSelected] = useState("$");
   const [code, setCode] = useState(characterCode("$"));
@@ -2729,6 +2730,7 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
         </div>
 
         <div className="math-ribbon-body">
+            
           <div className={`math-ribbon-palette ${isRootsGroup ? "roots-fraction-palette" : ""} 
           ${isArrowGroup ? "arrow-symbol-palette" : ""} 
           ${isScriptLayoutGroup ? "script-layout-palette" : ""}
@@ -2753,7 +2755,9 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
                 items={MATH_GROUPS[grp].items}
                 onInsert={ins}
                 onMatrix={chooseMatrix}
+                
               />
+
             ) : (
               <GenericSymbolPalette
                 items={MATH_GROUPS[grp].items}
@@ -3302,7 +3306,7 @@ export default function RichTextEditor({
         {/* ── CHEM button ── */}
         <TBtn title="Insert Chemistry Equation" special="chem" wide
           onClick={()=>{ saveSelection(); setEditTarget(null); setModal("chem"); }}>
-         
+          <span className="rich-text-tool-icon chem">⚗</span>
           <span className="rich-text-tool-label">Chem</span>
         </TBtn>
       </div>
@@ -3343,7 +3347,7 @@ export default function RichTextEditor({
         <MathModal
           key={`math-${editTarget?.latex || "new"}`}
           initialLatex={editTarget?.type==="math" ? editTarget.latex : ""}
-          submitLabel={editTarget ? "✓ Update Equation" : "✓ Insert "}
+          submitLabel={editTarget ? "✓ Update Equation" : "✓ Insert Equation"}
           onInsert={l=>insertEquation(l,"math")}
           onClose={closeModal}
         />
@@ -3352,7 +3356,7 @@ export default function RichTextEditor({
         <ChemModal
           key={`chem-${editTarget?.latex || "new"}`}
           initialLatex={editTarget?.type==="chem" ? editTarget.latex : ""}
-          submitLabel={editTarget ? "✓ Update Equation" : "✓ Insert "}
+          submitLabel={editTarget ? "✓ Update Equation" : "✓ Insert Equation"}
           onInsert={l=>insertEquation(l,"chem")}
           onClose={closeModal}
         />

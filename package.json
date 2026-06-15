@@ -3,11 +3,13 @@
   "version": "1.0.0",
   "description": "Full-Stack MERN Quiz Application",
   "scripts": {
-    "dev":         "concurrently \"npm run server\" \"npm run client\"",
-    "server":      "cd server && npm run dev",
-    "client":      "cd client && npm run dev",
-    "install:all": "npm install && cd server && npm install && cd ../client && npm install",
-    "build":       "cd client && npm run build"
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "npm run dev --prefix server",
+    "client": "npm run dev --prefix client",
+    "install:all": "npm install && npm install --prefix server && npm install --prefix client",
+    "build": "npm run build --prefix client",
+    "vercel:install": "npm install --prefix client && npm install --prefix server",
+    "vercel:build": "npm run build --prefix client"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
