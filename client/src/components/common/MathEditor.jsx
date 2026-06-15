@@ -126,6 +126,14 @@ const parseMatrixLatex = (latex = "") => {
   };
 };
 
+const parseMatrixSequenceLatex = (latex = "") => {
+  const parts = String(latex).trim().split(/\s*\\,\s*/).filter(Boolean);
+  if (parts.length <= 1) return [];
+
+  const matrices = parts.map(part => parseMatrixLatex(part));
+  return matrices.every(Boolean) ? matrices : [];
+};
+
 const serializeMatrixLatex = (rows, env = "bmatrix") =>
   `\\begin{${env}}${rows.map(row => row.map(cell => cell.trim()).join("&")).join("\\\\")}\\end{${env}}`;
 
@@ -159,6 +167,7 @@ const renderMatrixElement = (MQ, el, matrix) => {
 const renderStaticEquation = (MQ, el, latex) => {
   if (!MQ || !el) return;
   const matrix = parseMatrixLatex(latex);
+  const matrixSequence = matrix ? [] : parseMatrixSequenceLatex(latex);
   const lines = splitEquationLines(latex);
 
   el.style.background = "transparent";
@@ -167,12 +176,23 @@ const renderStaticEquation = (MQ, el, latex) => {
   el.innerHTML = "";
   el.classList.toggle("meq-multiline", lines.length > 1);
   el.classList.toggle("meq-matrix-wrap", Boolean(matrix));
+  el.classList.toggle("meq-matrix-sequence", matrixSequence.length > 1);
   ["bmatrix", "pmatrix", "vmatrix", "matrix", "cases", "boxmatrix", "dboxmatrix"].forEach(env =>
     el.classList.toggle(`meq-matrix-${env}`, matrix?.env === env)
   );
 
   if (matrix) {
     renderMatrixElement(MQ, el, matrix);
+    el.classList.add("mqr");
+    return;
+  }
+
+  if (matrixSequence.length > 1) {
+    matrixSequence.forEach(sequenceMatrix => {
+      const matrixEl = document.createElement("span");
+      renderMatrixElement(MQ, matrixEl, sequenceMatrix);
+      el.appendChild(matrixEl);
+    });
     el.classList.add("mqr");
     return;
   }
@@ -292,41 +312,41 @@ const ARROW_SYMBOL_GROUPS = [
 const CALCULUS_SYMBOL_GROUPS = [
   [
     [
-      { icon:"intLimits", l:"\\int_{a}^{b}", t:"Integral with upper and lower limits" },
-      { icon:"intDifferential", l:"\\int f dx", t:"Integral with differential", fallback:"∫ f dx" },
+      { icon:"intLimits", l:"\\int_{}^{}", t:"Integral with upper and lower limits" },
+      { icon:"intDifferential", l:"\\int{}d{}", t:"Integral with differential", fallback:"∫ f dx" },
     ],
     [
-      { icon:"intLower", l:"\\int_{a}", t:"Integral with lower limit" },
-      { icon:"intLimitsDifferential", l:"\\int_{a}^{b} f dx", t:"Integral with limits and differential", fallback:"∫ₐᵇ f dx" },
+      { icon:"intLower", l:"\\int_{}", t:"Integral with lower limit" },
+      { icon:"intLimitsDifferential", l:"\\int_{}^{}{}d{}", t:"Integral with limits and differential", fallback:"∫ₐᵇ f dx" },
     ],
     [
       { icon:"int", l:"\\int", t:"Integral" },
-      { icon:"intDoubleDifferential", l:"\\int f dx dy", t:"Integral with two differentials", fallback:"∫ f dx dy" },
+      { icon:"intDoubleDifferential", l:"\\int{}d{}d{}", t:"Integral with two differentials", fallback:"∫ f dx dy" },
     ],
   ],
   [
     [
       { d:"d", l:"d", t:"Differential d" },
-      { icon:"dOverDx", l:"\\frac{d}{dx}", t:"Derivative operator" },
+      { icon:"dOverDx", l:"\\frac{d}{d{}}", t:"Derivative operator" },
     ],
     [
       { d:"∂", l:"\\partial", t:"Partial differential" },
-      { icon:"partialOverDx", l:"\\frac{\\partial}{\\partial x}", t:"Partial derivative operator" },
+      { icon:"partialOverDx", l:"\\frac{\\partial}{\\partial{}}", t:"Partial derivative operator" },
     ],
     [
-      { icon:"secondDerivative", l:"\\frac{d^{2}}{dx^{2}}", t:"Second derivative operator" },
+      { icon:"secondDerivative", l:"\\frac{d^{2}}{d{}^{2}}", t:"Second derivative operator" },
     ],
   ],
   [
     [
-      { icon:"limToInfinity", l:"\\lim_{x\\to\\infty}", t:"Limit to infinity" },
-      { icon:"nablaCross", l:"\\nabla\\times F", t:"Curl" },
-      { icon:"nablaBox", l:"\\nabla f", t:"Gradient" },
+      { icon:"limToInfinity", l:"\\lim_{{}\\to\\infty}", t:"Limit to infinity" },
+      { icon:"nablaCross", l:"\\nabla\\times{}", t:"Curl" },
+      { icon:"nablaBox", l:"\\nabla{}", t:"Gradient" },
     ],
     [
-      { icon:"limBox", l:"\\lim_{x\\to a}", t:"Limit with condition" },
-      { icon:"nablaDot", l:"\\nabla\\cdot F", t:"Divergence" },
-      { icon:"deltaBox", l:"\\Delta x", t:"Delta operator" },
+      { icon:"limBox", l:"\\lim_{{}\\to{}}", t:"Limit with condition" },
+      { icon:"nablaDot", l:"\\nabla\\cdot{}", t:"Divergence" },
+      { icon:"deltaBox", l:"\\Delta{}", t:"Delta operator" },
     ],
     [
       { d:"lim", l:"\\lim", t:"Limit" },
@@ -354,7 +374,7 @@ const CALCULUS_SYMBOL_GROUPS = [
     ],
     [
       { d:"log", l:"\\log", t:"Logarithm" },
-      { icon:"logBase", l:"\\log_{b}", t:"Logarithm with base" },
+      { icon:"logBase", l:"\\log_{}", t:"Logarithm with base" },
       { d:"ln", l:"\\ln", t:"Natural logarithm" },
     ],
     [
@@ -368,38 +388,38 @@ const CALCULUS_SYMBOL_GROUPS = [
 const LARGE_OPERATOR_SYMBOL_GROUPS = [
   [
     [
-      { op:"Σ", mode:"limits", l:"\\sum_{i=1}^{n}", t:"Summation with upper and lower limits" },
-      { op:"Σ", mode:"upper", l:"\\sum^{n}", t:"Summation with upper limit" },
+      { op:"Σ", mode:"limits", l:"\\sum_{}^{}", t:"Summation with upper and lower limits" },
+      { op:"Σ", mode:"upper", l:"\\sum^{}", t:"Summation with upper limit" },
     ],
     [
       { op:"Σ", mode:"plain", l:"\\sum", t:"Summation" },
-      { op:"Σ", mode:"lower", l:"\\sum_{i=1}", t:"Summation with lower limit" },
+      { op:"Σ", mode:"lower", l:"\\sum_{}", t:"Summation with lower limit" },
     ],
     [
-      { op:"Σ", mode:"sideLimits", l:"\\sum_{i=1}^{n}", t:"Inline summation with limits" },
+      { op:"Σ", mode:"sideLimits", l:"\\sum_{}^{}", t:"Inline summation with limits" },
     ],
   ],
   [
     [
-      { op:"Π", mode:"limits", l:"\\prod_{i=1}^{n}", t:"Product with upper and lower limits" },
-      { op:"Π", mode:"upper", l:"\\prod^{n}", t:"Product with upper limit" },
+      { op:"Π", mode:"limits", l:"\\prod_{}^{}", t:"Product with upper and lower limits" },
+      { op:"Π", mode:"upper", l:"\\prod^{}", t:"Product with upper limit" },
     ],
     [
       { op:"Π", mode:"plain", l:"\\prod", t:"Product" },
-      { op:"Π", mode:"lower", l:"\\prod_{i=1}", t:"Product with lower limit" },
+      { op:"Π", mode:"lower", l:"\\prod_{}", t:"Product with lower limit" },
     ],
     [
-      { op:"Π", mode:"sideLimits", l:"\\prod_{i=1}^{n}", t:"Inline product with limits" },
+      { op:"Π", mode:"sideLimits", l:"\\prod_{}^{}", t:"Inline product with limits" },
     ],
   ],
   [
     [
-      { op:"∐", mode:"limits", l:"\\coprod_{i=1}^{n}", t:"Coproduct with upper and lower limits" },
-      { op:"∐", mode:"sideLimits", l:"\\coprod_{i=1}^{n}", t:"Inline coproduct with limits" },
+      { op:"∐", mode:"limits", l:"\\coprod_{}^{}", t:"Coproduct with upper and lower limits" },
+      { op:"∐", mode:"sideLimits", l:"\\coprod_{}^{}", t:"Inline coproduct with limits" },
     ],
     [
       { op:"∐", mode:"plain", l:"\\coprod", t:"Coproduct" },
-      { op:"⨿", mode:"lower", l:"\\bigsqcup_{i=1}", t:"Disjoint union with lower limit" },
+      { op:"⨿", mode:"lower", l:"\\bigsqcup_{}", t:"Disjoint union with lower limit" },
     ],
     [
       { op:"⊔", mode:"plain", l:"\\sqcup", t:"Square union" },
@@ -413,8 +433,8 @@ const LARGE_OPERATOR_SYMBOL_GROUPS = [
       { op:"∪", mode:"large", l:"\\bigcup", t:"Big union" },
     ],
     [
-      { op:"⋂", mode:"lower", l:"\\bigcap_{i=1}", t:"Intersection with lower limit" },
-      { op:"⋃", mode:"lower", l:"\\bigcup_{i=1}", t:"Union with lower limit" },
+      { op:"⋂", mode:"lower", l:"\\bigcap_{}", t:"Intersection with lower limit" },
+      { op:"⋃", mode:"lower", l:"\\bigcup_{}", t:"Union with lower limit" },
     ],
   ],
 ];
@@ -422,53 +442,53 @@ const LARGE_OPERATOR_SYMBOL_GROUPS = [
 const BRACKET_SYMBOL_GROUPS = [
   [
     [
-      { icon:"paren", l:"\\left(x\\right)", t:"Parentheses" },
-      { icon:"abs", l:"\\left|x\\right|", t:"Absolute value bars" },
-      { icon:"angle", l:"⟨x⟩", t:"Angle brackets", plain:true },
+      { icon:"paren", l:"\\left({}\\right)", t:"Parentheses" },
+      { icon:"abs", l:"\\left|{}\\right|", t:"Absolute value bars" },
+      { icon:"angle", l:"\\left\\langle{}\\right\\rangle", t:"Angle brackets" },
     ],
     [
-      { icon:"bracket", l:"\\left[x\\right]", t:"Square brackets" },
-      { icon:"norm", l:"‖x‖", t:"Double bars / norm", plain:true },
-      { icon:"brace", l:"\\left\\{x\\right\\}", t:"Braces" },
+      { icon:"bracket", l:"\\left[{}\\right]", t:"Square brackets" },
+      { icon:"norm", l:"\\left\\|{}\\right\\|", t:"Double bars / norm" },
+      { icon:"brace", l:"\\left\\{{}\\right\\}", t:"Braces" },
     ],
     [
-      { icon:"floor", l:"\\lfloor x\\rfloor", t:"Floor brackets" },
-      { icon:"ceil", l:"\\lceil x\\rceil", t:"Ceiling brackets" },
-      { icon:"corner", l:"⌜□⌝", t:"Corner brackets", plain:true },
+      { icon:"floor", l:"\\lfloor{}\\rfloor", t:"Floor brackets" },
+      { icon:"ceil", l:"\\lceil{}\\rceil", t:"Ceiling brackets" },
+      { icon:"corner", l:"⌜⌝", t:"Corner brackets", plain:true },
     ],
   ],
   [
     [
-      { icon:"overline", l:"\\overline{x}", t:"Overline" },
-      { icon:"overbrace", l:"⏞x", t:"Overbrace", plain:true },
+      { icon:"overline", l:"\\overline{}", t:"Overline" },
+      { icon:"overbrace", l:"\\overbrace{}", t:"Overbrace" },
     ],
     [
-      { icon:"underline", l:"\\underline{x}", t:"Underline" },
-      { icon:"underbrace", l:"x⏟", t:"Underbrace", plain:true },
+      { icon:"underline", l:"\\underline{}", t:"Underline" },
+      { icon:"underbrace", l:"\\underbrace{}", t:"Underbrace" },
     ],
     [
       { icon:"boxed", l:buildMatrixLatex(1, 1, "boxmatrix"), t:"Boxed expression" },
-      { icon:"sqrtBox", l:"\\sqrt{x}", t:"Square root placeholder" },
+      { icon:"sqrtBox", l:"\\sqrt{}", t:"Square root placeholder" },
     ],
   ],
   [
     [
-      { icon:"dot", l:"ẋ", t:"Dot accent", plain:true },
-      { icon:"ddot", l:"ẍ", t:"Double dot accent", plain:true },
-      { icon:"hat", l:"x̂", t:"Hat accent", plain:true },
-      { icon:"tilde", l:"x̃", t:"Tilde accent", plain:true },
+      { icon:"dot", l:"\\dot{}", t:"Dot accent" },
+      { icon:"ddot", l:"\\ddot{}", t:"Double dot accent" },
+      { icon:"hat", l:"\\hat{}", t:"Hat accent" },
+      { icon:"tilde", l:"\\tilde{}", t:"Tilde accent" },
     ],
     [
-      { icon:"bar", l:"\\bar{x}", t:"Bar accent" },
-      { icon:"vec", l:"\\vec{x}", t:"Vector accent" },
-      { icon:"breve", l:"x̆", t:"Breve accent", plain:true },
-      { icon:"check", l:"x̌", t:"Check accent", plain:true },
+      { icon:"bar", l:"\\bar{}", t:"Bar accent" },
+      { icon:"vec", l:"\\vec{}", t:"Vector accent" },
+      { icon:"breve", l:"\\breve{}", t:"Breve accent" },
+      { icon:"check", l:"\\check{}", t:"Check accent" },
     ],
     [
-      { icon:"prime", l:"x'", t:"Prime" },
-      { icon:"doublePrime", l:"x''", t:"Double prime" },
-      { icon:"widehat", l:"x̂", t:"Wide hat", plain:true },
-      { icon:"widetilde", l:"x̃", t:"Wide tilde", plain:true },
+      { icon:"prime", l:"{}'", t:"Prime" },
+      { icon:"doublePrime", l:"{}''", t:"Double prime" },
+      { icon:"widehat", l:"\\widehat{}", t:"Wide hat" },
+      { icon:"widetilde", l:"\\widetilde{}", t:"Wide tilde" },
     ],
   ],
   [
@@ -507,67 +527,67 @@ const BRACKET_SYMBOL_GROUPS = [
 const SCRIPT_LAYOUT_SYMBOL_GROUPS = [
   [
     [
-      { icon:"fraction", l:"\\frac{a}{b}", t:"Fraction" },
-      { icon:"smallFraction", l:"\\frac{a}{b}", t:"Small fraction" },
+      { icon:"fraction", l:"\\frac{}{}", t:"Fraction" },
+      { icon:"smallFraction", l:"\\frac{}{}", t:"Small fraction" },
     ],
     [
-      { icon:"slashFraction", l:"\\frac{a}{b}", t:"Slash fraction" },
-      { icon:"bevelFraction", l:"a/b", t:"Beveled fraction" },
+      { icon:"slashFraction", l:"\\frac{}{}", t:"Slash fraction" },
+      { icon:"bevelFraction", l:"{}/{}", t:"Beveled fraction" },
     ],
     [
-      { icon:"stackedFraction", l:"\\frac{\\frac{a}{b}}{c}", t:"Stacked fraction" },
-    ],
-  ],
-  [
-    [
-      { icon:"sqrt", l:"\\sqrt{x}", t:"Square root" },
-      { icon:"power", l:"x^{n}", t:"Superscript" },
-    ],
-    [
-      { icon:"nthRoot", l:"\\sqrt[n]{x}", t:"Nth root" },
-      { icon:"subscript", l:"x_{n}", t:"Subscript" },
-    ],
-    [
-      { icon:"rootFraction", l:"\\frac{\\sqrt{x}}{b}", t:"Root over denominator" },
-      { icon:"subsup", l:"x_{n}^{m}", t:"Subscript and superscript" },
+      { icon:"stackedFraction", l:"\\frac{\\frac{}{}}{}", t:"Stacked fraction" },
     ],
   ],
   [
     [
-      { icon:"leftSup", l:"{}^{n}x", t:"Left superscript" },
-      { icon:"leftSub", l:"{}_{n}x", t:"Left subscript" },
-      { icon:"leftSubsup", l:"{}_{n}^{m}x", t:"Left subscript and superscript" },
+      { icon:"sqrt", l:"\\sqrt{}", t:"Square root" },
+      { icon:"power", l:"{}^{}", t:"Superscript" },
     ],
     [
-      { icon:"rightSup", l:"x^{n}", t:"Right superscript" },
-      { icon:"rightSub", l:"x_{n}", t:"Right subscript" },
-      { icon:"rightSubsup", l:"x_{n}^{m}", t:"Right subscript and superscript" },
+      { icon:"nthRoot", l:"\\sqrt[]{}", t:"Nth root" },
+      { icon:"subscript", l:"{}_{}", t:"Subscript" },
     ],
     [
-      { icon:"prescript", l:"{}_{n}^{m}x", t:"Pre-script" },
+      { icon:"rootFraction", l:"\\frac{\\sqrt{}}{}", t:"Root over denominator" },
+      { icon:"subsup", l:"{}_{ }^{ }", t:"Subscript and superscript" },
+    ],
+  ],
+  [
+    [
+      { icon:"leftSup", l:"{}^{}", t:"Left superscript" },
+      { icon:"leftSub", l:"{}_{}", t:"Left subscript" },
+      { icon:"leftSubsup", l:"{}_{ }^{ }", t:"Left subscript and superscript" },
+    ],
+    [
+      { icon:"rightSup", l:"{}^{}", t:"Right superscript" },
+      { icon:"rightSub", l:"{}_{}", t:"Right subscript" },
+      { icon:"rightSubsup", l:"{}_{ }^{ }", t:"Right subscript and superscript" },
+    ],
+    [
+      { icon:"prescript", l:"{}_{ }^{ }", t:"Pre-script" },
     ],
   ],
   [
     [
       { icon:"verticalDots", l:"\\vdots", t:"Vertical dots" },
-      { icon:"matrixColumn", l:"\\frac{x}{y}", t:"Two-row column" },
+      { icon:"matrixColumn", l:"\\frac{}{}", t:"Two-row column" },
     ],
     [
-      { icon:"threeStack", l:"\\frac{\\frac{x}{y}}{z}", t:"Three-row stack" },
+      { icon:"threeStack", l:"\\frac{\\frac{}{}}{}", t:"Three-row stack" },
       { icon:"caseStack", l:buildMatrixLatex(2, 1, "cases"), t:"Cases stack" },
     ],
     [
-      { icon:"dottedStack", l:"x,\\ldots,z", t:"Dotted stack" },
+      { icon:"dottedStack", l:"{},\\ldots,{}", t:"Dotted stack" },
     ],
   ],
   [
     [
-      { icon:"overBox", l:"x^{n}", t:"Box above" },
-      { icon:"underBox", l:"x_{n}", t:"Box below" },
+      { icon:"overBox", l:"{}^{}", t:"Box above" },
+      { icon:"underBox", l:"{}_{}", t:"Box below" },
     ],
     [
       { icon:"boxedTall", l:buildMatrixLatex(1, 1, "boxmatrix"), t:"Tall box" },
-      { icon:"sideBox", l:"xy", t:"Side-by-side boxes" },
+      { icon:"sideBox", l:"{}{}", t:"Side-by-side boxes" },
     ],
     [
       { icon:"doubleBox", l:buildMatrixLatex(1, 1, "dboxmatrix"), t:"Nested box" },
@@ -576,8 +596,8 @@ const SCRIPT_LAYOUT_SYMBOL_GROUPS = [
   [
     [
       { icon:"smallRow", l:buildMatrixLatex(1, 2, "matrix"), t:"Two small boxes" },
-      { icon:"smallPair", l:"x\\,y", t:"Spaced pair" },
-      { icon:"smallTriple", l:"x\\,y\\,z", t:"Three small boxes" },
+      { icon:"smallPair", l:"{}\\,{}", t:"Spaced pair" },
+      { icon:"smallTriple", l:"{}\\,{}\\,{}", t:"Three small boxes" },
     ],
     [
       { icon:"threeColumns", l:buildMatrixLatex(1, 3, "matrix"), t:"Three columns" },
@@ -659,52 +679,52 @@ const CALCULUS_POPUP_SYMBOL_GROUPS = [
 
 const SCRIPT_LAYOUT_POPUP_SYMBOL_GROUPS = [
   [
-    { icon:"nestedFraction", l:"\\frac{a}{\\frac{b}{c}}", t:"Nested denominator fraction" },
-    { icon:"sumNumerator", l:"\\frac{a+b}{c}", t:"Sum over denominator" },
-    { icon:"sumDenominator", l:"\\frac{a}{b+c}", t:"Numerator over sum" },
+    { icon:"nestedFraction", l:"\\frac{}{\\frac{}{}}", t:"Nested denominator fraction" },
+    { icon:"sumNumerator", l:"\\frac{+}{}", t:"Sum over denominator" },
+    { icon:"sumDenominator", l:"\\frac{}{+}", t:"Numerator over sum" },
   ],
   [
-    { icon:"cubeRoot", l:"\\sqrt[3]{x}", t:"Cube root", fallback:"∛x" },
-    { icon:"fourthRoot", l:"\\sqrt[4]{x}", t:"Fourth root", fallback:"⁴√x" },
-    { icon:"negativePower", l:"x^{-1}", t:"Negative power" },
+    { icon:"cubeRoot", l:"\\sqrt[3]{}", t:"Cube root", fallback:"∛x" },
+    { icon:"fourthRoot", l:"\\sqrt[4]{}", t:"Fourth root", fallback:"⁴√x" },
+    { icon:"negativePower", l:"{}^{-1}", t:"Negative power" },
   ],
   [
-    { icon:"prescript", l:"{}_{i}^{j}A", t:"Pre-script matrix index" },
-    { icon:"leftSubsup", l:"{}_{a}^{b}x", t:"Left subscript and superscript" },
-    { icon:"rightSubsup", l:"x_{a}^{b}", t:"Right subscript and superscript" },
+    { icon:"prescript", l:"{}_{ }^{ }", t:"Pre-script matrix index" },
+    { icon:"leftSubsup", l:"{}_{ }^{ }", t:"Left subscript and superscript" },
+    { icon:"rightSubsup", l:"{}_{ }^{ }", t:"Right subscript and superscript" },
   ],
   [
     { icon:"verticalDots", l:"\\vdots", t:"Vertical dots" },
-    { icon:"dottedStack", l:"a,\\ldots,n", t:"Dotted sequence" },
+    { icon:"dottedStack", l:"{},\\ldots,{}", t:"Dotted sequence" },
     { icon:"caseStack", l:buildMatrixLatex(3, 1, "cases"), t:"Three-line cases" },
   ],
   [
     { icon:"boxedTall", l:buildMatrixLatex(1, 1, "boxmatrix"), t:"Boxed placeholder" },
     { icon:"doubleBox", l:buildMatrixLatex(1, 1, "dboxmatrix"), t:"Double boxed placeholder" },
-    { icon:"sideBox", l:"a\\,b", t:"Side by side placeholders" },
+    { icon:"sideBox", l:"{}\\,{}", t:"Side by side placeholders" },
   ],
   [
     { icon:"grid", l:buildMatrixLatex(2, 2, "matrix"), t:"Two by two grid" },
     { icon:"threeColumns", l:buildMatrixLatex(1, 3, "matrix"), t:"Three-column layout" },
-    { icon:"smallTriple", l:"a\\,b\\,c", t:"Three small boxes" },
+    { icon:"smallTriple", l:"{}\\,{}\\,{}", t:"Three small boxes" },
   ],
 ];
 
 const BRACKET_POPUP_SYMBOL_GROUPS = [
   [
-    { icon:"angle", l:"\\left\\langle x\\right\\rangle", t:"Angle bracket pair", fallback:"⟨x⟩" },
-    { icon:"norm", l:"\\left\\|x\\right\\|", t:"Norm pair", fallback:"‖x‖" },
-    { icon:"corner", l:"⌜x⌝", t:"Corner bracket pair", plain:true },
+    { icon:"angle", l:"\\left\\langle{}\\right\\rangle", t:"Angle bracket pair", fallback:"⟨□⟩" },
+    { icon:"norm", l:"\\left\\|{}\\right\\|", t:"Norm pair", fallback:"‖□‖" },
+    { icon:"corner", l:"⌜⌝", t:"Corner bracket pair", plain:true },
   ],
   [
-    { icon:"overline", l:"\\overline{AB}", t:"Line segment" },
-    { icon:"underline", l:"\\underline{AB}", t:"Underlined segment" },
-    { icon:"sqrtBox", l:"\\sqrt{x+y}", t:"Root with expression" },
+    { icon:"overline", l:"\\overline{}", t:"Line segment" },
+    { icon:"underline", l:"\\underline{}", t:"Underlined segment" },
+    { icon:"sqrtBox", l:"\\sqrt{}", t:"Root with expression" },
   ],
   [
-    { icon:"widehat", l:"\\hat{x}", t:"Hat accent" },
-    { icon:"widetilde", l:"\\tilde{x}", t:"Tilde accent" },
-    { icon:"vec", l:"\\vec{x}", t:"Vector accent" },
+    { icon:"widehat", l:"\\hat{}", t:"Hat accent" },
+    { icon:"widetilde", l:"\\tilde{}", t:"Tilde accent" },
+    { icon:"vec", l:"\\vec{}", t:"Vector accent" },
   ],
   [
     { icon:"leftBar", l:"\\left|", t:"Left absolute value bar", fallback:"|" },
@@ -722,7 +742,7 @@ const BRACKET_POPUP_SYMBOL_GROUPS = [
 const LARGE_OPERATOR_POPUP_SYMBOL_GROUPS = [
   [
     { op:"⨊", mode:"plain", l:"⨊", t:"Modulo two sum", plain:true },
-    { op:"∑", mode:"sideLimits", l:"\\sum_{k=0}^{\\infty}", t:"Infinite series", fallback:"∑∞" },
+    { op:"∑", mode:"sideLimits", l:"\\sum_{}^{\\infty}", t:"Infinite series", fallback:"∑∞" },
     { op:"⨋", mode:"plain", l:"⨋", t:"Summation with integral", plain:true },
   ],
   [
@@ -736,8 +756,8 @@ const LARGE_OPERATOR_POPUP_SYMBOL_GROUPS = [
     { op:"⨄", mode:"large", l:"\\biguplus", t:"Big union plus" },
   ],
   [
-    { op:"⋃", mode:"sideLimits", l:"\\bigcup_{i=1}^{n}", t:"Union with limits" },
-    { op:"⋂", mode:"sideLimits", l:"\\bigcap_{i=1}^{n}", t:"Intersection with limits" },
+    { op:"⋃", mode:"sideLimits", l:"\\bigcup_{}^{}", t:"Union with limits" },
+    { op:"⋂", mode:"sideLimits", l:"\\bigcap_{}^{}", t:"Intersection with limits" },
     { op:"⨆", mode:"large", l:"\\bigsqcup", t:"Big square union" },
   ],
 ];
@@ -778,28 +798,53 @@ const GENERIC_POPUP_SYMBOLS = {
   ],
   "Matrices & Vectors": [
     { d:"4×4", l:buildMatrixLatex(4, 4, "bmatrix"), t:"4 by 4 matrix" },
-    { d:"diag", l:"\\begin{bmatrix}a&0\\\\0&b\\end{bmatrix}", t:"Diagonal matrix" },
-    { d:"det", l:"\\det A", t:"Determinant" },
-    { d:"rank", l:"\\operatorname{rank}A", t:"Rank", fallback:"rank A" },
-    { d:"A⁻¹", l:"A^{-1}", t:"Inverse matrix" },
-    { d:"A*", l:"A^{*}", t:"Conjugate transpose" },
-    { d:"span", l:"\\operatorname{span}\\{v_{1},v_{2}\\}", t:"Span", fallback:"span" },
-    { d:"proj", l:"\\operatorname{proj}_{u}v", t:"Projection", fallback:"proj" },
+    { d:"diag", l:"\\begin{bmatrix}&0\\\\0&\\end{bmatrix}", t:"Diagonal matrix" },
+    { d:"det", l:"\\det{}", t:"Determinant" },
+    { d:"rank", l:"\\operatorname{rank}{}", t:"Rank", fallback:"rank A" },
+    { d:"A⁻¹", l:"{}^{-1}", t:"Inverse matrix" },
+    { d:"A*", l:"{}^{*}", t:"Conjugate transpose" },
+    { d:"span", l:"\\operatorname{span}\\{{},{}\\}", t:"Span", fallback:"span" },
+    { d:"proj", l:"\\operatorname{proj}_{}{}", t:"Projection", fallback:"proj" },
     { d:"⟂", l:"\\perp", t:"Perpendicular" },
   ],
 };
 
+const MATRIX_POPUP_TEMPLATES = [
+  { icon:"columnPlus", l:buildMatrixLatex(3, 1, "bmatrix") + "+" + buildMatrixLatex(3, 1, "bmatrix"), t:"Column vector addition", fallback:"column vector plus" },
+  { icon:"columnMinus", l:buildMatrixLatex(3, 1, "bmatrix") + "-" + buildMatrixLatex(3, 1, "bmatrix"), t:"Column vector subtraction", fallback:"column vector minus" },
+  { icon:"scalarColumn", l:"{}" + buildMatrixLatex(3, 1, "bmatrix"), t:"Scalar times column vector", fallback:"x column vector" },
+  { icon:"bracketPair", l:buildMatrixLatex(2, 2, "bmatrix"), t:"Bracketed matrix pair" },
+  { icon:"blockPair", l:buildMatrixLatex(2, 2, "matrix"), t:"Block matrix layout" },
+  { icon:"indexedColumn", l:"{}_{}" + buildMatrixLatex(3, 1, "bmatrix"), t:"Indexed column vector", fallback:"indexed column vector" },
+  { l:buildMatrixLatex(3, 1, "bmatrix"), t:"Bracket column vector" },
+  { l:buildMatrixLatex(3, 1, "matrix"), t:"Column layout" },
+  { l:buildMatrixLatex(3, 2, "bmatrix"), t:"Three by two bracket matrix" },
+  { l:buildMatrixLatex(2, 2, "pmatrix"), t:"Two by two parenthesis matrix" },
+  { l:buildMatrixLatex(1, 3, "matrix"), t:"Row vector" },
+  { l:"\\begin{bmatrix}&0\\\\0&\\end{bmatrix}", t:"Diagonal matrix" },
+  { l:buildMatrixLatex(4, 1, "bmatrix"), t:"Four row column vector" },
+  { l:buildMatrixLatex(2, 3, "matrix"), t:"Two by three matrix" },
+  { d:"⋱", l:"\\ddots", t:"Diagonal dots" },
+];
+
+const MATRIX_SELECTOR_ENVS = [
+  { env: "bmatrix", title: "Square brackets" },
+  { env: "pmatrix", title: "Parentheses" },
+  { env: "vmatrix", title: "Determinant bars" },
+  { env: "matrix", title: "No brackets" },
+];
+
 const MATH_GROUP_ITEMS = [
   { icon:"√", label:"Roots & Fractions", items:[
-    {d:"a/b",l:"\\frac{a}{b}",t:"Fraction"},{d:"√x",l:"\\sqrt{x}",t:"Square root"},
-    {d:"x²",l:"x^{2}",t:"Square"},{d:"xⁿ",l:"x^{n}",t:"Power n"},
-    {d:"∛x",l:"\\sqrt[3]{x}",t:"Cube root"},{d:"1/x",l:"\\frac{1}{x}",t:"Reciprocal"},
-    {d:"|x|",l:"\\left|x\\right|",t:"Absolute value"},{d:"⌊x⌋",l:"\\lfloor x\\rfloor",t:"Floor"},
-    {d:"⌈x⌉",l:"\\lceil x\\rceil",t:"Ceiling"},{d:"a/b/c",l:"\\frac{\\frac{a}{b}}{c}",t:"Nested fraction"},
-    {d:"ⁿ√x",l:"\\sqrt[n]{x}",t:"Nth root"},{d:"√a/b",l:"\\frac{\\sqrt{a}}{b}",t:"Root over denominator"},
-    {d:"a/(b+c)",l:"\\frac{a}{b+c}",t:"Fraction with sum denominator"},{d:"(a+b)/c",l:"\\frac{a+b}{c}",t:"Sum over c"},
-    {d:"x⁻¹",l:"x^{-1}",t:"Negative power"},{d:"xₙ",l:"x_{n}",t:"Subscript n"},
-    {d:"xₙᵐ",l:"x_{n}^{m}",t:"Subscript and superscript"},{d:"ⁿCᵣ",l:"{}^{n}C_{r}",t:"Combination"},
+    {d:"a/b",l:"\\frac{}{}",t:"Fraction"},{d:"√x",l:"\\sqrt{}",t:"Square root"},
+    {d:"x²",l:"{}^{2}",t:"Square"},{d:"xⁿ",l:"{}^{}",t:"Power n"},
+    {d:"∛x",l:"\\sqrt[3]{}",t:"Cube root"},{d:"1/x",l:"\\frac{1}{}",t:"Reciprocal"},
+    {d:"|x|",l:"\\left|{}\\right|",t:"Absolute value"},{d:"⌊x⌋",l:"\\lfloor{}\\rfloor",t:"Floor"},
+    {d:"⌈x⌉",l:"\\lceil{}\\rceil",t:"Ceiling"},{d:"a/b/c",l:"\\frac{\\frac{}{}}{}",t:"Nested fraction"},
+    {d:"ⁿ√x",l:"\\sqrt[]{}",t:"Nth root"},{d:"√a/b",l:"\\frac{\\sqrt{}}{}",t:"Root over denominator"},
+    {d:"a/(b+c)",l:"\\frac{}{+}",t:"Fraction with sum denominator"},{d:"(a+b)/c",l:"\\frac{+}{}",t:"Sum over c"},
+    {d:"x⁻¹",l:"{}^{-1}",t:"Negative power"},{d:"xₙ",l:"{}_{}",t:"Subscript n"},
+    {d:"xₙᵐ",l:"{}_{ }^{ }",t:"Subscript and superscript"},{d:"ⁿCᵣ",l:"{}^{}C_{}",t:"Combination"},
   ]},
   { icon:"αΩ", label:"Greek Letters", items:[
     {d:"α",l:"\\alpha",t:"alpha"},{d:"β",l:"\\beta",t:"beta"},{d:"γ",l:"\\gamma",t:"gamma"},
@@ -867,13 +912,13 @@ const MATH_GROUP_ITEMS = [
     {d:"( )",l:buildMatrixLatex(3,3,"pmatrix"),t:"Parenthesis matrix"},
     {d:"| |",l:buildMatrixLatex(3,3,"vmatrix"),t:"Determinant matrix"},
     {d:"□",l:buildMatrixLatex(3,3,"matrix"),t:"No-bracket matrix"},
-    {d:"→v",l:"\\vec{v}",t:"Vector"},{d:"u·v",l:"u\\cdot v",t:"Dot product"},
-    {d:"u×v",l:"u\\times v",t:"Cross product"},{d:"‖v‖",l:"\\left|\\left|v\\right|\\right|",t:"Norm"},
+    {d:"→v",l:"\\vec{}",t:"Vector"},{d:"u·v",l:"{}\\cdot{}",t:"Dot product"},
+    {d:"u×v",l:"{}\\times{}",t:"Cross product"},{d:"‖v‖",l:"\\left\\|{}\\right\\|",t:"Norm"},
     {d:"2×2",l:buildMatrixLatex(2,2,"bmatrix"),t:"2 by 2 matrix"},
-    {d:"2×1",l:"\\begin{bmatrix}x\\\\y\\end{bmatrix}",t:"2D column vector"},
-    {d:"3×1",l:"\\begin{bmatrix}x\\\\y\\\\z\\end{bmatrix}",t:"3D column vector"},
+    {d:"2×1",l:buildMatrixLatex(2,1,"bmatrix"),t:"2D column vector"},
+    {d:"3×1",l:buildMatrixLatex(3,1,"bmatrix"),t:"3D column vector"},
     {d:"I₂",l:"\\begin{bmatrix}1&0\\\\0&1\\end{bmatrix}",t:"2 by 2 identity matrix"},
-    {d:"Aᵀ",l:"A^{T}",t:"Transpose"},
+    {d:"Aᵀ",l:"{}^{T}",t:"Transpose"},
   ]},
 ];
 
@@ -929,29 +974,29 @@ const CHEM_GROUPS = [
 ];
 
 const ROOT_FRACTION_MAIN = [
-  { icon:"fraction", l:"\\frac{a}{b}", t:"Fraction" },
-  { icon:"sqrt", l:"\\sqrt{x}", t:"Square root" },
-  { icon:"sup", l:"x^{2}", t:"Superscript" },
-  { icon:"paren", l:"\\left(x\\right)", t:"Parentheses" },
-  { icon:"bracket", l:"\\left[x\\right]", t:"Brackets" },
-  { icon:"slashFraction", l:"\\frac{a}{b}", t:"Fraction slash" },
-  { icon:"nthRoot", l:"\\sqrt[n]{x}", t:"Nth root" },
-  { icon:"sub", l:"x_{n}", t:"Subscript" },
-  { icon:"absolute", l:"\\left|x\\right|", t:"Absolute value" },
-  { icon:"brace", l:"\\left\\{x\\right\\}", t:"Braces" },
-  { icon:"smallFraction", l:"\\frac{1}{x}", t:"Reciprocal" },
-  { icon:"rootFraction", l:"\\frac{\\sqrt{a}}{b}", t:"Root over denominator" },
-  { icon:"subsup", l:"x_{n}^{m}", t:"Subscript and superscript" },
+  { icon:"fraction", l:"\\frac{}{}", t:"Fraction" },
+  { icon:"sqrt", l:"\\sqrt{}", t:"Square root" },
+  { icon:"sup", l:"{}^{}", t:"Superscript" },
+  { icon:"paren", l:"\\left({}\\right)", t:"Parentheses" },
+  { icon:"bracket", l:"\\left[{}\\right]", t:"Brackets" },
+  { icon:"slashFraction", l:"\\frac{}{}", t:"Fraction slash" },
+  { icon:"nthRoot", l:"\\sqrt[]{}", t:"Nth root" },
+  { icon:"sub", l:"{}_{}", t:"Subscript" },
+  { icon:"absolute", l:"\\left|{}\\right|", t:"Absolute value" },
+  { icon:"brace", l:"\\left\\{{}\\right\\}", t:"Braces" },
+  { icon:"smallFraction", l:"\\frac{}{}", t:"Reciprocal" },
+  { icon:"rootFraction", l:"\\frac{\\sqrt{}}{}", t:"Root over denominator" },
+  { icon:"subsup", l:"{}_{ }^{ }", t:"Subscript and superscript" },
 ];
 
 const ROOT_FRACTION_EXTRA = [
-  { icon:"cubeRoot", l:"\\sqrt[3]{x}", t:"Cube root" },
-  { icon:"nestedFraction", l:"\\frac{\\frac{a}{b}}{c}", t:"Nested fraction" },
-  { icon:"sumDenominator", l:"\\frac{a}{b+c}", t:"Fraction with sum denominator" },
-  { icon:"sumNumerator", l:"\\frac{a+b}{c}", t:"Sum over c" },
-  { icon:"negativePower", l:"x^{-1}", t:"Negative power" },
-  { icon:"floor", l:"\\lfloor x\\rfloor", t:"Floor" },
-  { icon:"ceiling", l:"\\lceil x\\rceil", t:"Ceiling" },
+  { icon:"cubeRoot", l:"\\sqrt[3]{}", t:"Cube root" },
+  { icon:"nestedFraction", l:"\\frac{\\frac{}{}}{}", t:"Nested fraction" },
+  { icon:"sumDenominator", l:"\\frac{}{+}", t:"Fraction with sum denominator" },
+  { icon:"sumNumerator", l:"\\frac{+}{}", t:"Sum over c" },
+  { icon:"negativePower", l:"{}^{-1}", t:"Negative power" },
+  { icon:"floor", l:"\\lfloor{}\\rfloor", t:"Floor" },
+  { icon:"ceiling", l:"\\lceil{}\\rceil", t:"Ceiling" },
 ];
 
 const ROOT_QUICK_SYMBOLS = [
@@ -1204,6 +1249,30 @@ function FloatingPanel({ anchorRef, open, className, children, align = "right", 
   );
 }
 
+function useCloseFloatingPanel(open, setOpen, anchorRef, panelSelector) {
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const closeWhenOutside = (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+      if (anchorRef.current?.contains(target) || target.closest(panelSelector)) return;
+      setOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+
+    document.addEventListener("pointerdown", closeWhenOutside, true);
+    document.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.removeEventListener("pointerdown", closeWhenOutside, true);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [anchorRef, open, panelSelector, setOpen]);
+}
+
 // ── Small symbol button inside modals ─────────────────────────────────────────
 const SB = ({children,onClick,title,active,color="#000",bg="#f8f9fa",activeBg="#dbeafe"}) => {
   return (
@@ -1265,6 +1334,7 @@ function RibbonPopupCluster({
 }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef(null);
+  useCloseFloatingPanel(open, setOpen, triggerRef, ".ribbon-popup-panel");
   const buttonClass = (item) =>
     typeof buttonClassName === "function" ? buttonClassName(item) : buttonClassName;
 
@@ -1348,6 +1418,237 @@ function GenericSymbolPalette({ items, popupItems = [], onInsert, onMatrix }) {
           popupTitle="More symbols in this section"
         />
       ))}
+    </div>
+  );
+}
+
+function MatrixTemplateIcon({ item }) {
+  if (item.icon) {
+    const column = (
+      <span className="matrix-op-column">
+        <span className="matrix-template-cell" />
+        <span className="matrix-template-cell" />
+        <span className="matrix-template-cell" />
+      </span>
+    );
+    const smallBlock = (
+      <span className="matrix-op-block">
+        <span className="matrix-template-cell" />
+        <span className="matrix-template-cell" />
+      </span>
+    );
+
+    switch (item.icon) {
+      case "columnPlus":
+      case "columnMinus":
+        return (
+          <span className="matrix-op-icon">
+            {column}
+            <span className="matrix-op-symbol">{item.icon === "columnPlus" ? "+" : "−"}</span>
+            {column}
+          </span>
+        );
+      case "scalarColumn":
+        return (
+          <span className="matrix-op-icon">
+            <span className="matrix-op-symbol">x</span>
+            {column}
+          </span>
+        );
+      case "bracketPair":
+        return (
+          <span className="matrix-op-icon bracket-pair">
+            <span className="matrix-op-bracket">[</span>
+            {smallBlock}
+            <span className="matrix-op-bracket">]</span>
+            {smallBlock}
+          </span>
+        );
+      case "blockPair":
+        return (
+          <span className="matrix-op-icon block-pair">
+            {smallBlock}
+            <span className="matrix-op-separator" />
+            {smallBlock}
+          </span>
+        );
+      case "indexedColumn":
+        return (
+          <span className="matrix-op-icon indexed-column">
+            <span className="matrix-op-symbol small">n</span>
+            {column}
+          </span>
+        );
+      default:
+        break;
+    }
+  }
+
+  const matrix = parseMatrixLatex(item.l);
+
+  if (!matrix) {
+    return <span className="matrix-symbol-text">{item.d}</span>;
+  }
+
+  const rows = Math.min(matrix.rowCount || 1, 4);
+  const cols = Math.min(matrix.colCount || 1, 4);
+  const cells = Array.from({ length: rows * cols });
+
+  return (
+    <span className={`matrix-template-icon matrix-template-${matrix.env}`}>
+      <span className="matrix-template-left" />
+      <span
+        className="matrix-template-grid"
+        style={{ "--matrix-icon-cols": cols }}
+      >
+        {cells.map((_, index) => (
+          <span key={index} className="matrix-template-cell" />
+        ))}
+      </span>
+      <span className="matrix-template-right" />
+    </span>
+  );
+}
+
+function MatrixSymbolPalette({ items, popupItems = MATRIX_POPUP_TEMPLATES, onInsert, onMatrix }) {
+  const [open, setOpen] = useState(false);
+  const [selectorOpen, setSelectorOpen] = useState(false);
+  const [selectorEnv, setSelectorEnv] = useState("bmatrix");
+  const [selectorSize, setSelectorSize] = useState({ rows: 1, cols: 2 });
+  const triggerRef = useRef(null);
+  const selectorRef = useRef(null);
+  useCloseFloatingPanel(open, setOpen, triggerRef, ".matrix-symbol-popup");
+  useCloseFloatingPanel(selectorOpen, setSelectorOpen, selectorRef, ".matrix-size-popup");
+  const groups = chunkRibbonItems(items, 12, 4);
+  const handleInsert = (item) => {
+    if (parseMatrixLatex(item.l) && onMatrix) onMatrix(item.l);
+    else onInsert(item.l, symbolFallback(item));
+  };
+  const pickMatrixSize = (rows, cols) => {
+    const latex = buildMatrixLatex(rows, cols, selectorEnv);
+    if (onMatrix) onMatrix(latex);
+    else onInsert(latex, `${rows} by ${cols} matrix`);
+    setSelectorOpen(false);
+  };
+
+  return (
+    <div className="matrix-symbol-board" aria-label="Matrix symbols">
+      {groups.map((group, groupIndex) => (
+        <div className="matrix-symbol-cluster" key={`matrix-symbol-group-${groupIndex}`}>
+          {group.map((row, rowIndex) => (
+            <div className="matrix-symbol-row" key={`matrix-symbol-row-${groupIndex}-${rowIndex}`}>
+              {row.map((item, itemIndex) => {
+                const isBracketMatrix = item.t === "Bracket matrix";
+
+                return (
+                  <span className="matrix-symbol-button-wrap" key={`${item.t || item.d}-${item.l}-${rowIndex}-${itemIndex}`}>
+                    <button
+                      ref={isBracketMatrix ? selectorRef : null}
+                      type="button"
+                      title={isBracketMatrix ? "Choose bracket matrix size" : item.t}
+                      aria-expanded={isBracketMatrix ? selectorOpen : undefined}
+                      className={`matrix-symbol-button ${parseMatrixLatex(item.l) ? "template" : ""} ${isBracketMatrix && selectorOpen ? "active" : ""}`}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        if (isBracketMatrix) {
+                          setSelectorEnv("bmatrix");
+                          setSelectorOpen(value => !value);
+                        } else {
+                          handleInsert(item);
+                        }
+                      }}
+                    >
+                      <MatrixTemplateIcon item={item} />
+                    </button>
+
+                    {isBracketMatrix && (
+                      <FloatingPanel anchorRef={selectorRef} open={selectorOpen} className="matrix-size-popup" align="left" offset={4}>
+                        <div className="matrix-style-selector" aria-label="Matrix style">
+                          {MATRIX_SELECTOR_ENVS.map(style => (
+                            <button
+                              key={style.env}
+                              type="button"
+                              title={style.title}
+                              className={`matrix-style-button ${selectorEnv === style.env ? "active" : ""}`}
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => setSelectorEnv(style.env)}
+                            >
+                              <MatrixTemplateIcon item={{ l: buildMatrixLatex(2, 2, style.env), t: style.title }} />
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="matrix-size-selector" aria-label="Matrix size selector">
+                          {Array.from({ length: 6 }, (_, selectorRowIndex) =>
+                            Array.from({ length: 6 }, (_, selectorColIndex) => {
+                              const rows = selectorRowIndex + 1;
+                              const cols = selectorColIndex + 1;
+                              const active = rows <= selectorSize.rows && cols <= selectorSize.cols;
+
+                              return (
+                                <button
+                                  key={`${rows}-${cols}`}
+                                  type="button"
+                                  title={`${rows} row${rows > 1 ? "s" : ""}, ${cols} column${cols > 1 ? "s" : ""}`}
+                                  className={`matrix-size-cell ${active ? "active" : ""}`}
+                                  onMouseEnter={() => setSelectorSize({ rows, cols })}
+                                  onFocus={() => setSelectorSize({ rows, cols })}
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => pickMatrixSize(rows, cols)}
+                                />
+                              );
+                            })
+                          )}
+                        </div>
+
+                        <div className="matrix-size-readout">
+                          <span>Rows:</span>
+                          <strong>{selectorSize.rows}</strong>
+                          <span>Columns:</span>
+                          <strong>{selectorSize.cols}</strong>
+                        </div>
+                      </FloatingPanel>
+                    )}
+                  </span>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      ))}
+      {popupItems.length > 0 && (
+        <div className="matrix-symbol-cluster matrix-symbol-popup-cluster">
+          <button
+            ref={triggerRef}
+            type="button"
+            title="More matrix templates"
+            aria-expanded={open}
+            className={`matrix-symbol-more-trigger ${open ? "active" : ""}`}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setOpen(value => !value)}
+          >
+            ▾
+          </button>
+
+          <FloatingPanel anchorRef={triggerRef} open={open} className="matrix-symbol-popup" align="right" offset={4}>
+            {popupItems.map((item, index) => (
+              <button
+                key={`matrix-popup-${item.t || item.d}-${item.l}-${index}`}
+                type="button"
+                title={item.t}
+                className={`matrix-symbol-popup-item ${parseMatrixLatex(item.l) ? "template" : ""}`}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  handleInsert(item);
+                  setOpen(false);
+                }}
+              >
+                <MatrixTemplateIcon item={item} />
+              </button>
+            ))}
+          </FloatingPanel>
+        </div>
+      )}
     </div>
   );
 }
@@ -2026,6 +2327,7 @@ function RootFractionTemplateButton({ item, onPick }) {
 function RootFractionPalette({ onInsert }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef(null);
+  useCloseFloatingPanel(open, setOpen, triggerRef, ".root-template-popup");
   const pick = (latex, fallbackText = "") => {
     onInsert(latex, fallbackText);
     setOpen(false);
@@ -2058,125 +2360,6 @@ function RootFractionPalette({ onInsert }) {
             ))}
         </FloatingPanel>
       </div>
-    </div>
-  );
-}
-
-function MatrixButtonIcon() {
-  return (
-    <span className="matrix-button-icon">
-      <span className="matrix-button-bracket">[</span>
-      <span className="matrix-button-grid">
-        {[0,1,2,3].map(i => (
-          <span key={i} className="matrix-button-cell" />
-        ))}
-      </span>
-      <span className="matrix-button-bracket">]</span>
-    </span>
-  );
-}
-
-function MatrixPicker({ onPick }) {
-  const [open, setOpen] = useState(false);
-  const [hover, setHover] = useState({ rows: 3, cols: 3 });
-  const [env, setEnv] = useState("bmatrix");
-  const triggerRef = useRef(null);
-  const maxRows = 6;
-  const maxCols = 6;
-
-  const envButtons = [
-    { env: "bmatrix", label: "[ ]", title: "Square brackets" },
-    { env: "pmatrix", label: "( )", title: "Parentheses" },
-    { env: "vmatrix", label: "| |", title: "Determinant" },
-    { env: "matrix", label: "none", title: "No brackets" },
-  ];
-  const clamp = (value, max) => Math.min(Math.max(Number(value) || 1, 1), max);
-  const pick = (rows = hover.rows, cols = hover.cols) => {
-    onPick(buildMatrixLatex(rows, cols, env));
-    setOpen(false);
-  };
-
-  return (
-    <div className="matrix-picker">
-      <button
-        ref={triggerRef}
-        type="button"
-        title="Matrix"
-        onMouseDown={(e)=>e.preventDefault()}
-        onClick={()=>setOpen(value=>!value)}
-        className={`matrix-picker-trigger ${open ? "open" : ""}`}
-      >
-        <MatrixButtonIcon />
-        <span className="matrix-picker-caret">▾</span>
-      </button>
-
-      <FloatingPanel anchorRef={triggerRef} open={open} className="matrix-picker-panel" align="left" offset={5}>
-          <div className="matrix-picker-env-grid">
-            {envButtons.map(button => (
-              <button
-                key={button.env}
-                type="button"
-                title={button.title}
-                onClick={()=>setEnv(button.env)}
-                className={`matrix-picker-env-button ${env===button.env ? "active" : ""}`}
-              >
-                {button.label}
-              </button>
-            ))}
-          </div>
-
-          <div
-            className="matrix-picker-grid"
-            style={{ "--matrix-picker-cols": maxCols }}
-          >
-            {Array.from({ length: maxRows * maxCols }, (_, index) => {
-              const row = Math.floor(index / maxCols) + 1;
-              const col = (index % maxCols) + 1;
-              const active = row <= hover.rows && col <= hover.cols;
-
-              return (
-                <button
-                  key={index}
-                  type="button"
-                  title={`${row} rows, ${col} columns`}
-                  onMouseEnter={()=>setHover({rows:row,cols:col})}
-                  onFocus={()=>setHover({rows:row,cols:col})}
-                  onClick={()=>pick(row,col)}
-                  className={`matrix-picker-cell-button ${active ? "active" : ""}`}
-                />
-              );
-            })}
-          </div>
-
-          <div className="matrix-picker-fields">
-            <label className="matrix-picker-label">Rows:</label>
-            <input
-              type="number"
-              min={1}
-              max={maxRows}
-              value={hover.rows}
-              onChange={e=>setHover(value=>({...value,rows:clamp(e.target.value,maxRows)}))}
-              className="matrix-picker-input"
-            />
-            <label className="matrix-picker-label">Columns:</label>
-            <input
-              type="number"
-              min={1}
-              max={maxCols}
-              value={hover.cols}
-              onChange={e=>setHover(value=>({...value,cols:clamp(e.target.value,maxCols)}))}
-              className="matrix-picker-input"
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={()=>pick()}
-            className="matrix-picker-insert"
-          >
-            Insert {hover.rows}×{hover.cols}
-          </button>
-      </FloatingPanel>
     </div>
   );
 }
@@ -2381,9 +2564,9 @@ function MatrixEditor({ latex, onChange, inCanvas = false, fontSize = 20 }) {
 // Multiline equation area (shared by both modals)
 // ════════════════════════════════════════════════════════════════════════════
 function EquationArea({ accent="blue", lines, setLines, activeLine, setActiveLine,
-  lineRefs, mqRefs, MQ, fontSize=14, minHeight=190, matrixLatex="", setMatrixLatex,
-  textDirection="ltr" }) {
-  const editingMatrix = Boolean(matrixLatex && setMatrixLatex);
+  lineRefs, mqRefs, MQ, fontSize=14, minHeight=190, matrixLatexes=[], setMatrixLatexAt,
+  textDirection="ltr", matrixVersion=0 }) {
+  const editingMatrix = Boolean(matrixLatexes.length && setMatrixLatexAt);
   const isRtl = textDirection === "rtl";
 
   const handleKey = (e,i) => {
@@ -2412,7 +2595,15 @@ function EquationArea({ accent="blue", lines, setLines, activeLine, setActiveLin
             className="equation-matrix-canvas"
             style={{ "--equation-matrix-min-height": `${minHeight - 22}px` }}
           >
-            <MatrixEditor latex={matrixLatex} onChange={setMatrixLatex} inCanvas fontSize={fontSize} />
+            {matrixLatexes.map((latex, matrixIndex) => (
+              <MatrixEditor
+                key={`${matrixVersion}-${matrixIndex}`}
+                latex={latex}
+                onChange={(nextLatex) => setMatrixLatexAt(matrixIndex, nextLatex)}
+                inCanvas
+                fontSize={fontSize}
+              />
+            ))}
           </div>
         ) : !MQ && (
           <div className="equation-loading">
@@ -2457,7 +2648,8 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
   const [font,setFont] = useState("serif");
   const [size,setSize] = useState(16);
   const [editorDirection,setEditorDirection] = useState("ltr");
-  const [matrixLatex,setMatrixLatex] = useState(initialMatrix);
+  const [matrixLatexes,setMatrixLatexes] = useState(() => initialMatrix ? [initialMatrix] : []);
+  const [matrixVersion,setMatrixVersion] = useState(0);
   const [lines,setLines]           = useState(() => {
     if (initialMatrix) return [""];
     const initialLines = splitEquationLines(initialLatex);
@@ -2467,6 +2659,8 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
   const lineRefs = useRef([]);
   const mqRefs   = useRef([]);
   const [MQ,setMQ] = useState(null);
+  const hasMatrix = matrixLatexes.length > 0;
+  const matrixLatex = matrixLatexes.join("\\,");
 
   useEffect(()=>{
     let c=false;
@@ -2476,7 +2670,7 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
 
   useEffect(()=>{
     if(!MQ) return;
-    if(matrixLatex) return;
+    if(hasMatrix) return;
     lines.forEach((lt,i)=>{
       if(!lineRefs.current[i]||mqRefs.current[i]) return;
       const mq=MQ.MathField(lineRefs.current[i],{
@@ -2485,56 +2679,57 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
       });
       mq.latex(lt||""); mqRefs.current[i]=mq;
     });
-  },[MQ,lines.length,matrixLatex]);
+  },[MQ,lines.length,hasMatrix]);
 
   useEffect(()=>{
-    if(matrixLatex) return;
+    if(hasMatrix) return;
     setTimeout(()=>mqRefs.current[activeLine]?.focus(),30);
-  },[activeLine,lines.length,matrixLatex]);
+  },[activeLine,lines.length,hasMatrix]);
 
-  const ins = (l, fallbackText = "") => {
-    if (parseMatrixLatex(l)) {
-      setMatrixLatex(l);
-      setLines([""]);
-      mqRefs.current=[];
-      lineRefs.current=[];
-      setActiveLine(0);
-      return;
-    }
-
-    if (matrixLatex) {
-      setMatrixLatex("");
-      setLines([""]);
-      mqRefs.current=[];
-      lineRefs.current=[];
-      setActiveLine(0);
-      setTimeout(()=>mqInsert(mqRefs.current[0], l, fallbackText),60);
-      return;
-    }
-    setMatrixLatex("");
-    mqInsert(mqRefs.current[activeLine], l, fallbackText);
-  };
-  const insertSpecialChar = char => {
-    if (matrixLatex) {
-      setMatrixLatex("");
-      setLines([""]);
-      mqRefs.current=[];
-      lineRefs.current=[];
-      setActiveLine(0);
-      setTimeout(()=>mqInsertPlainText(mqRefs.current[0], char),60);
-      return;
-    }
-    setMatrixLatex("");
-    mqInsertPlainText(mqRefs.current[activeLine], char);
-  };
-  const chooseMatrix = l => {
-    setMatrixLatex(l);
+  const resetMathFields = () => {
     setLines([""]);
     mqRefs.current=[];
     lineRefs.current=[];
     setActiveLine(0);
   };
-  const clr = () => { setMatrixLatex(""); setLines([""]); mqRefs.current=[]; lineRefs.current=[]; setActiveLine(0); };
+  const appendMatrix = (l) => {
+    setMatrixLatexes(previous => [...previous, l]);
+    setMatrixVersion(value => value + 1);
+    resetMathFields();
+  };
+  const setMatrixLatexAt = (matrixIndex, nextLatex) => {
+    setMatrixLatexes(previous => previous.map((latex, index) => index === matrixIndex ? nextLatex : latex));
+  };
+
+  const ins = (l, fallbackText = "") => {
+    if (parseMatrixLatex(l)) {
+      appendMatrix(l);
+      return;
+    }
+
+    if (hasMatrix) {
+      setMatrixLatexes([]);
+      resetMathFields();
+      setTimeout(()=>mqInsert(mqRefs.current[0], l, fallbackText),60);
+      return;
+    }
+    setMatrixLatexes([]);
+    mqInsert(mqRefs.current[activeLine], l, fallbackText);
+  };
+  const insertSpecialChar = char => {
+    if (hasMatrix) {
+      setMatrixLatexes([]);
+      resetMathFields();
+      setTimeout(()=>mqInsertPlainText(mqRefs.current[0], char),60);
+      return;
+    }
+    setMatrixLatexes([]);
+    mqInsertPlainText(mqRefs.current[activeLine], char);
+  };
+  const chooseMatrix = l => {
+    appendMatrix(l);
+  };
+  const clr = () => { setMatrixLatexes([]); resetMathFields(); };
   const toggleEditorDirection = () => {
     setEditorDirection(d => d === "rtl" ? "ltr" : "rtl");
     setTimeout(()=>mqRefs.current[activeLine]?.focus(),30);
@@ -2582,7 +2777,8 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
           ${isScriptLayoutGroup ? "script-layout-palette" : ""}
            ${isBracketGroup ? "bracket-symbol-palette" : ""}
             ${isLargeOperatorGroup ? "large-operator-palette" : ""}
-             ${isCalculusGroup ? "calculus-symbol-palette" : ""}`}>
+             ${isCalculusGroup ? "calculus-symbol-palette" : ""}
+             ${isMatrixGroup ? "matrix-symbol-palette" : ""}`}>
             {isRootsGroup ? (
               <RootFractionPalette onInsert={ins} />
             ) : isArrowGroup ? (
@@ -2595,15 +2791,18 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
               <LargeOperatorPalette onInsert={ins} />
             ) : isCalculusGroup ? (
               <CalculusSymbolPalette onInsert={ins} onPlainInsert={insertSpecialChar} />
+            ) : isMatrixGroup ? (
+              <MatrixSymbolPalette
+                items={MATH_GROUPS[grp].items}
+                onInsert={ins}
+                onMatrix={chooseMatrix}
+              />
             ) : (
-              <>
-                {isMatrixGroup && <MatrixPicker onPick={chooseMatrix} />}
-                <GenericSymbolPalette
-                  items={MATH_GROUPS[grp].items}
-                  onInsert={ins}
-                  onMatrix={chooseMatrix}
-                />
-              </>
+              <GenericSymbolPalette
+                items={MATH_GROUPS[grp].items}
+                onInsert={ins}
+                onMatrix={chooseMatrix}
+              />
             )}
           </div>
 
@@ -2623,13 +2822,13 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
                     {b.d}
                   </button>
                 ))}
-                <button type="button" title="Bold math" className="math-ribbon-mini rich" onClick={()=>ins("\\mathbf{x}", "B")}>
+                <button type="button" title="Bold math" className="math-ribbon-mini rich" onClick={()=>ins("\\mathbf{}", "B")}>
                   <b>B</b>
                 </button>
-                <button type="button" title="Italic math" className="math-ribbon-mini rich" onClick={()=>ins("\\mathit{x}", "I")}>
+                <button type="button" title="Italic math" className="math-ribbon-mini rich" onClick={()=>ins("\\mathit{}", "I")}>
                   <i>1b</i>
                 </button>
-                <button type="button" title="Blackboard" className="math-ribbon-mini rich" onClick={()=>ins("\\mathbb{R}", "R")}>
+                <button type="button" title="Blackboard" className="math-ribbon-mini rich" onClick={()=>ins("\\mathbb{}", "R")}>
                   T
                 </button>
                 <SpecialCharacterPicker onPick={insertSpecialChar} />
@@ -2658,11 +2857,11 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
 
           <button
             type="button"
-            title={matrixLatex ? "Clear matrix" : "Delete last"}
+            title={hasMatrix ? "Clear matrices" : "Delete last"}
             className="math-ribbon-backspace"
-            onClick={()=>matrixLatex ? setMatrixLatex("") : mqRefs.current[activeLine]?.keystroke("Backspace")}
+            onClick={()=>hasMatrix ? setMatrixLatexes([]) : mqRefs.current[activeLine]?.keystroke("Backspace")}
           >
-            {matrixLatex ? "Clear matrix" : "↩"}
+            {hasMatrix ? "Clear matrices" : "↩"}
           </button>
         </div>
       </div>
@@ -2671,8 +2870,8 @@ function MathModal({ onInsert, onClose, initialLatex = "", submitLabel = "✓ In
       <EquationArea accent="blue" lines={lines} setLines={setLines}
         activeLine={activeLine} setActiveLine={setActiveLine}
         lineRefs={lineRefs} mqRefs={mqRefs} MQ={MQ} fontSize={size} minHeight={160}
-        matrixLatex={matrixLatex} setMatrixLatex={setMatrixLatex}
-        textDirection={editorDirection} />
+        matrixLatexes={matrixLatexes} setMatrixLatexAt={setMatrixLatexAt}
+        textDirection={editorDirection} matrixVersion={matrixVersion} />
 
       {/* Bottom status + actions */}
       <div className="modal-actions-footer">
